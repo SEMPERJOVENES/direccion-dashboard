@@ -371,6 +371,15 @@ const STYLES = `
   .manage-row{display:flex;align-items:center;gap:10px;padding:10px 8px;border-bottom:1px solid rgba(255,255,255,0.04);border-radius:6px;transition:background 0.15s;}
   .manage-row:hover{background:rgba(255,255,255,0.03);}
   .manage-row:last-child{border-bottom:none;}
+
+  /* Inline edit */
+  .inline-edit{background:rgba(255,255,255,0.06);border:1.5px solid ${B.orange};border-radius:6px;color:${B.text};font-family:inherit;font-size:0.82rem;padding:6px 10px;outline:none;flex:1;line-height:1.5;}
+  .edit-pencil{background:none;border:none;cursor:pointer;color:${B.textMuted};font-size:0.65rem;padding:2px 5px;border-radius:4px;transition:all 0.15s;flex-shrink:0;opacity:0.5;}
+  .edit-pencil:hover{opacity:1;color:${B.orange};}
+  .save-check{background:none;border:none;cursor:pointer;color:#5ec47a;font-size:0.8rem;padding:2px 5px;border-radius:4px;transition:all 0.15s;flex-shrink:0;}
+  .save-check:hover{background:rgba(94,196,122,0.15);}
+  .cancel-edit{background:none;border:none;cursor:pointer;color:${B.textMuted};font-size:0.7rem;padding:2px 5px;border-radius:4px;transition:all 0.15s;flex-shrink:0;}
+  .cancel-edit:hover{color:#f56565;}
 `;
 
 export default function SemperDashboard() {
@@ -397,6 +406,12 @@ export default function SemperDashboard() {
 
   // Personas state
   const [activePerson, setActivePerson] = useState(null);
+
+  // Inline editing state
+  const [editingTask, setEditingTask] = useState(null); // { mId, tId, text }
+  const [editingAlert, setEditingAlert] = useState(null); // { mId, idx, text }
+  const [inlineNewTask, setInlineNewTask] = useState({}); // { [mId]: text }
+  const [inlineNewAlert, setInlineNewAlert] = useState({}); // { [mId]: text }
 
   const saveTimer = useRef(null);
 
@@ -484,6 +499,24 @@ export default function SemperDashboard() {
       ...data,
       ministries: data.ministries.map(m => m.id === mId ? { ...m, alerts: [...m.alerts, text.trim()] } : m),
     });
+  };
+
+  const editTask = (mId, tId, newText) => {
+    if (!newText.trim()) return;
+    save({
+      ...data,
+      ministries: data.ministries.map(m => m.id === mId ? { ...m, tasks: m.tasks.map(t => t.id === tId ? { ...t, text: newText.trim() } : t) } : m),
+    });
+    setEditingTask(null);
+  };
+
+  const editAlert = (mId, idx, newText) => {
+    if (!newText.trim()) return;
+    save({
+      ...data,
+      ministries: data.ministries.map(m => m.id === mId ? { ...m, alerts: m.alerts.map((a, i) => i === idx ? newText.trim() : a) } : m),
+    });
+    setEditingAlert(null);
   };
 
   // ── Computed ──
@@ -731,36 +764,85 @@ export default function SemperDashboard() {
                 <div className="label">Tareas</div>
                 {ministry.tasks.map(task => (
                   <div key={task.id} className="taskrow" style={{ justifyContent: "space-between" }}>
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 10, flex: 1, cursor: "pointer" }} onClick={() => toggleTask(ministry.id, task.id)}>
-                      <div className={`cb${task.done ? " on" : ""}`}>
-                        {task.done && <span style={{ color: "#0f0e0c", fontSize: "0.65rem", fontWeight: "900" }}>✓</span>}
+                    {editingTask?.mId === ministry.id && editingTask?.tId === task.id ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                        <input className="inline-edit" value={editingTask.text} autoFocus
+                          onChange={e => setEditingTask({ ...editingTask, text: e.target.value })}
+                          onKeyDown={e => { if (e.key === "Enter") editTask(ministry.id, task.id, editingTask.text); if (e.key === "Escape") setEditingTask(null); }}
+                        />
+                        <button className="save-check" onClick={() => editTask(ministry.id, task.id, editingTask.text)} title="Guardar">✓</button>
+                        <button className="cancel-edit" onClick={() => setEditingTask(null)} title="Cancelar">✕</button>
                       </div>
-                      <span style={{
-                        fontSize: "0.84rem", lineHeight: 1.55,
-                        color: task.done ? B.textMuted : B.textSub,
-                        textDecoration: task.done ? "line-through" : "none",
-                      }}>{task.text}</span>
-                    </div>
-                    {adminUnlocked && (
-                      <button className="del-x" onClick={(e) => { e.stopPropagation(); deleteTask(ministry.id, task.id); }} title="Eliminar tarea">✕</button>
+                    ) : (
+                      <>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, flex: 1, cursor: "pointer" }} onClick={() => toggleTask(ministry.id, task.id)}>
+                          <div className={`cb${task.done ? " on" : ""}`}>
+                            {task.done && <span style={{ color: "#0f0e0c", fontSize: "0.65rem", fontWeight: "900" }}>✓</span>}
+                          </div>
+                          <span style={{
+                            fontSize: "0.84rem", lineHeight: 1.55,
+                            color: task.done ? B.textMuted : B.textSub,
+                            textDecoration: task.done ? "line-through" : "none",
+                          }}>{task.text}</span>
+                        </div>
+                        {adminUnlocked && (
+                          <div style={{ display: "flex", gap: 2 }}>
+                            <button className="edit-pencil" onClick={(e) => { e.stopPropagation(); setEditingTask({ mId: ministry.id, tId: task.id, text: task.text }); }} title="Editar">✎</button>
+                            <button className="del-x" onClick={(e) => { e.stopPropagation(); deleteTask(ministry.id, task.id); }} title="Eliminar">✕</button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 ))}
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {ministry.alerts.length > 0 && (
-                  <div className="card" style={{ padding: "18px 20px" }}>
-                    <div className="label" style={{ color: "#f56565" }}>⚠ Alertas</div>
-                    {ministry.alerts.map((a, i) => (
-                      <div key={i} className="alerti" style={{ justifyContent: "space-between" }}>
-                        <span style={{ flex: 1 }}>{a}</span>
-                        {adminUnlocked && (
-                          <button className="del-x" onClick={() => deleteAlert(ministry.id, i)} title="Eliminar alerta">✕</button>
-                        )}
-                      </div>
-                    ))}
+                {adminUnlocked && (
+                  <div className="add-row">
+                    <input className="add-input" placeholder="Añadir tarea..." value={inlineNewTask[ministry.id] || ""}
+                      onChange={e => setInlineNewTask({ ...inlineNewTask, [ministry.id]: e.target.value })}
+                      onKeyDown={e => { if (e.key === "Enter" && (inlineNewTask[ministry.id] || "").trim()) { addTask(ministry.id, inlineNewTask[ministry.id]); setInlineNewTask({ ...inlineNewTask, [ministry.id]: "" }); } }}
+                    />
+                    <button className="add-btn" disabled={!(inlineNewTask[ministry.id] || "").trim()} onClick={() => { addTask(ministry.id, inlineNewTask[ministry.id]); setInlineNewTask({ ...inlineNewTask, [ministry.id]: "" }); }}>+</button>
                   </div>
                 )}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div className="card" style={{ padding: "18px 20px" }}>
+                  <div className="label" style={{ color: "#f56565" }}>⚠ Alertas</div>
+                  {ministry.alerts.length === 0 && <div style={{ fontSize: "0.75rem", color: B.textMuted, padding: "6px 0" }}>Sin alertas</div>}
+                  {ministry.alerts.map((a, i) => (
+                    <div key={i} className="alerti" style={{ justifyContent: "space-between" }}>
+                      {editingAlert?.mId === ministry.id && editingAlert?.idx === i ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                          <input className="inline-edit" value={editingAlert.text} autoFocus
+                            onChange={e => setEditingAlert({ ...editingAlert, text: e.target.value })}
+                            onKeyDown={e => { if (e.key === "Enter") editAlert(ministry.id, i, editingAlert.text); if (e.key === "Escape") setEditingAlert(null); }}
+                          />
+                          <button className="save-check" onClick={() => editAlert(ministry.id, i, editingAlert.text)} title="Guardar">✓</button>
+                          <button className="cancel-edit" onClick={() => setEditingAlert(null)} title="Cancelar">✕</button>
+                        </div>
+                      ) : (
+                        <>
+                          <span style={{ flex: 1 }}>{a}</span>
+                          {adminUnlocked && (
+                            <div style={{ display: "flex", gap: 2 }}>
+                              <button className="edit-pencil" onClick={() => setEditingAlert({ mId: ministry.id, idx: i, text: a })} title="Editar">✎</button>
+                              <button className="del-x" onClick={() => deleteAlert(ministry.id, i)} title="Eliminar">✕</button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  {adminUnlocked && (
+                    <div className="add-row">
+                      <input className="add-input" placeholder="Añadir alerta..." value={inlineNewAlert[ministry.id] || ""}
+                        onChange={e => setInlineNewAlert({ ...inlineNewAlert, [ministry.id]: e.target.value })}
+                        onKeyDown={e => { if (e.key === "Enter" && (inlineNewAlert[ministry.id] || "").trim()) { addAlert(ministry.id, inlineNewAlert[ministry.id]); setInlineNewAlert({ ...inlineNewAlert, [ministry.id]: "" }); } }}
+                      />
+                      <button className="add-btn" disabled={!(inlineNewAlert[ministry.id] || "").trim()} onClick={() => { addAlert(ministry.id, inlineNewAlert[ministry.id]); setInlineNewAlert({ ...inlineNewAlert, [ministry.id]: "" }); }}>+</button>
+                    </div>
+                  )}
+                </div>
                 {ministry.futureVision && (
                   <div className="card" style={{ padding: "18px 20px" }}>
                     <div className="label" style={{ color: B.orange }}>☁ A Futuro</div>
@@ -867,36 +949,85 @@ export default function SemperDashboard() {
                   <div className="label" style={{ fontSize: "0.58rem" }}>Tareas</div>
                   {m.tasks.map(task => (
                     <div key={task.id} className="taskrow" style={{ justifyContent: "space-between" }}>
-                      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, flex: 1, cursor: "pointer" }} onClick={() => toggleTask(m.id, task.id)}>
-                        <div className={`cb${task.done ? " on" : ""}`}>
-                          {task.done && <span style={{ color: "#0f0e0c", fontSize: "0.65rem", fontWeight: "900" }}>✓</span>}
+                      {editingTask?.mId === m.id && editingTask?.tId === task.id ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                          <input className="inline-edit" value={editingTask.text} autoFocus
+                            onChange={e => setEditingTask({ ...editingTask, text: e.target.value })}
+                            onKeyDown={e => { if (e.key === "Enter") editTask(m.id, task.id, editingTask.text); if (e.key === "Escape") setEditingTask(null); }}
+                          />
+                          <button className="save-check" onClick={() => editTask(m.id, task.id, editingTask.text)} title="Guardar">✓</button>
+                          <button className="cancel-edit" onClick={() => setEditingTask(null)} title="Cancelar">✕</button>
                         </div>
-                        <span style={{
-                          fontSize: "0.82rem", lineHeight: 1.55,
-                          color: task.done ? B.textMuted : B.textSub,
-                          textDecoration: task.done ? "line-through" : "none",
-                        }}>{task.text}</span>
-                      </div>
-                      {adminUnlocked && (
-                        <button className="del-x" onClick={(e) => { e.stopPropagation(); deleteTask(m.id, task.id); }} title="Eliminar tarea">✕</button>
+                      ) : (
+                        <>
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, flex: 1, cursor: "pointer" }} onClick={() => toggleTask(m.id, task.id)}>
+                            <div className={`cb${task.done ? " on" : ""}`}>
+                              {task.done && <span style={{ color: "#0f0e0c", fontSize: "0.65rem", fontWeight: "900" }}>✓</span>}
+                            </div>
+                            <span style={{
+                              fontSize: "0.82rem", lineHeight: 1.55,
+                              color: task.done ? B.textMuted : B.textSub,
+                              textDecoration: task.done ? "line-through" : "none",
+                            }}>{task.text}</span>
+                          </div>
+                          {adminUnlocked && (
+                            <div style={{ display: "flex", gap: 2 }}>
+                              <button className="edit-pencil" onClick={(e) => { e.stopPropagation(); setEditingTask({ mId: m.id, tId: task.id, text: task.text }); }} title="Editar">✎</button>
+                              <button className="del-x" onClick={(e) => { e.stopPropagation(); deleteTask(m.id, task.id); }} title="Eliminar">✕</button>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   ))}
-
-                  {/* Alerts for this ministry */}
-                  {m.alerts.length > 0 && (
-                    <div style={{ marginTop: 14 }}>
-                      <div className="label" style={{ fontSize: "0.58rem", color: "#f56565" }}>⚠ Alertas</div>
-                      {m.alerts.map((a, i) => (
-                        <div key={i} className="alerti" style={{ justifyContent: "space-between" }}>
-                          <span style={{ flex: 1 }}>{a}</span>
-                          {adminUnlocked && (
-                            <button className="del-x" onClick={() => deleteAlert(m.id, i)} title="Eliminar alerta">✕</button>
-                          )}
-                        </div>
-                      ))}
+                  {adminUnlocked && (
+                    <div className="add-row">
+                      <input className="add-input" placeholder="Añadir tarea..." value={inlineNewTask[m.id] || ""}
+                        onChange={e => setInlineNewTask({ ...inlineNewTask, [m.id]: e.target.value })}
+                        onKeyDown={e => { if (e.key === "Enter" && (inlineNewTask[m.id] || "").trim()) { addTask(m.id, inlineNewTask[m.id]); setInlineNewTask({ ...inlineNewTask, [m.id]: "" }); } }}
+                      />
+                      <button className="add-btn" disabled={!(inlineNewTask[m.id] || "").trim()} onClick={() => { addTask(m.id, inlineNewTask[m.id]); setInlineNewTask({ ...inlineNewTask, [m.id]: "" }); }}>+</button>
                     </div>
                   )}
+
+                  {/* Alerts for this ministry */}
+                  <div style={{ marginTop: 14 }}>
+                    <div className="label" style={{ fontSize: "0.58rem", color: "#f56565" }}>⚠ Alertas ({m.alerts.length})</div>
+                    {m.alerts.length === 0 && <div style={{ fontSize: "0.72rem", color: B.textMuted, padding: "4px 0" }}>Sin alertas</div>}
+                    {m.alerts.map((a, i) => (
+                      <div key={i} className="alerti" style={{ justifyContent: "space-between" }}>
+                        {editingAlert?.mId === m.id && editingAlert?.idx === i ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                            <input className="inline-edit" value={editingAlert.text} autoFocus
+                              onChange={e => setEditingAlert({ ...editingAlert, text: e.target.value })}
+                              onKeyDown={e => { if (e.key === "Enter") editAlert(m.id, i, editingAlert.text); if (e.key === "Escape") setEditingAlert(null); }}
+                            />
+                            <button className="save-check" onClick={() => editAlert(m.id, i, editingAlert.text)} title="Guardar">✓</button>
+                            <button className="cancel-edit" onClick={() => setEditingAlert(null)} title="Cancelar">✕</button>
+                          </div>
+                        ) : (
+                          <>
+                            <span style={{ flex: 1 }}>{a}</span>
+                            {adminUnlocked && (
+                              <div style={{ display: "flex", gap: 2 }}>
+                                <button className="edit-pencil" onClick={() => setEditingAlert({ mId: m.id, idx: i, text: a })} title="Editar">✎</button>
+                                <button className="del-x" onClick={() => deleteAlert(m.id, i)} title="Eliminar">✕</button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    ))}
+                    {adminUnlocked && (
+                      <div className="add-row">
+                        <input className="add-input" placeholder="Añadir alerta..." value={inlineNewAlert[m.id] || ""}
+                          onChange={e => setInlineNewAlert({ ...inlineNewAlert, [m.id]: e.target.value })}
+                          onKeyDown={e => { if (e.key === "Enter" && (inlineNewAlert[m.id] || "").trim()) { addAlert(m.id, inlineNewAlert[m.id]); setInlineNewAlert({ ...inlineNewAlert, [m.id]: "" }); } }}
+                        />
+                        <button className="add-btn" disabled={!(inlineNewAlert[m.id] || "").trim()} onClick={() => { addAlert(m.id, inlineNewAlert[m.id]); setInlineNewAlert({ ...inlineNewAlert, [m.id]: "" }); }}>+</button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}
