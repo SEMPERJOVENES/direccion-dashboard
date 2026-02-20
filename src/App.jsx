@@ -244,7 +244,11 @@ export default function SemperDashboard() {
   const [inlineNewTask, setInlineNewTask] = useState({}); // { [mId]: text }
   const [inlineNewAlert, setInlineNewAlert] = useState({}); // { [mId]: text }
 
-  // Confirm delete state: { type: "task"|"alert", mId, tId?, idx?, text }
+  // Event editing state
+  const [editingEvent, setEditingEvent] = useState(null); // { eId, name, date, priority }
+  const [newEvent, setNewEvent] = useState({ name: "", date: "", priority: "medium" });
+
+  // Confirm delete state: { type: "task"|"alert"|"event", mId?, tId?, idx?, eId?, text }
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   const saveTimer = useRef(null);
@@ -327,6 +331,11 @@ export default function SemperDashboard() {
         ...data,
         ministries: data.ministries.map(m => m.id === confirmDelete.mId ? { ...m, alerts: m.alerts.filter((_, i) => i !== confirmDelete.idx) } : m),
       });
+    } else if (confirmDelete.type === "event") {
+      save({
+        ...data,
+        events: data.events.filter(e => e.id !== confirmDelete.eId),
+      });
     }
     setConfirmDelete(null);
   };
@@ -367,6 +376,32 @@ export default function SemperDashboard() {
       ministries: data.ministries.map(m => m.id === mId ? { ...m, alerts: m.alerts.map((a, i) => i === idx ? newText.trim() : a) } : m),
     });
     setEditingAlert(null);
+  };
+
+  // ── Event CRUD ──
+  const addEvent = () => {
+    if (!newEvent.name.trim()) return;
+    const maxId = data.events.reduce((a, e) => Math.max(a, e.id), 0);
+    save({
+      ...data,
+      events: [...data.events, { id: maxId + 1, name: newEvent.name.trim(), date: newEvent.date.trim() || "Sin fecha", priority: newEvent.priority, done: false }],
+    });
+    setNewEvent({ name: "", date: "", priority: "medium" });
+  };
+
+  const editEvent = (eId) => {
+    if (!editingEvent || !editingEvent.name.trim()) return;
+    save({
+      ...data,
+      events: data.events.map(e => e.id === eId ? { ...e, name: editingEvent.name.trim(), date: editingEvent.date.trim() || e.date, priority: editingEvent.priority } : e),
+    });
+    setEditingEvent(null);
+  };
+
+  const requestDeleteEvent = (eId) => {
+    const ev = data.events.find(e => e.id === eId);
+    if (!ev) return;
+    setConfirmDelete({ type: "event", eId, text: `${ev.name} (${ev.date})` });
   };
 
   // ── Computed ──
@@ -502,7 +537,7 @@ export default function SemperDashboard() {
                 ))}
               </div>
             </div>
-            <div>
+            <div style={{ marginBottom: 24 }}>
               <div className="label">Todas las alertas</div>
               <div className="ag">
                 {data.ministries.flatMap(m => m.alerts.map((a, i) => (
@@ -518,6 +553,65 @@ export default function SemperDashboard() {
                 )))}
               </div>
             </div>
+
+            {/* ── Actividad por persona ── */}
+            <div style={{ marginBottom: 24 }}>
+              <div className="label">Actividad por persona</div>
+              <div className="card" style={{ padding: "14px 18px" }}>
+                {persons.map(p => {
+                  const pct = p.totalTasks > 0 ? Math.round((p.doneTasks / p.totalTasks) * 100) : 0;
+                  const mainColor = p.ministries.length > 0 ? p.ministries[0].color : B.textSub;
+                  const untouched = p.ministries.reduce((acc, m) => acc + m.tasks.filter(t => !t.done).length, 0);
+                  return (
+                    <div key={p.name} style={{ padding: "10px 0", borderBottom: `1px solid ${B.border}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: "0.85rem" }}>👤</span>
+                          <span style={{ fontSize: "0.82rem", color: mainColor, fontWeight: "700" }}>{p.name}</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          {untouched > 0 && (
+                            <span style={{ fontSize: "0.6rem", color: "#f56565", fontWeight: "600" }}>{untouched} pendiente{untouched > 1 ? "s" : ""}</span>
+                          )}
+                          <span style={{ fontSize: "0.7rem", color: pct === 100 ? "#5ec47a" : pct > 0 ? B.orange : B.textMuted, fontWeight: "700" }}>{pct}%</span>
+                        </div>
+                      </div>
+                      <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 3 }}>
+                        <div style={{ height: "100%", width: `${pct}%`, background: pct === 100 ? "#5ec47a" : mainColor, borderRadius: 3, transition: "width 0.5s", opacity: 0.85 }} />
+                      </div>
+                      <div style={{ fontSize: "0.58rem", color: B.textMuted, marginTop: 4, fontWeight: "600" }}>
+                        {p.doneTasks}/{p.totalTasks} tareas · {p.ministries.map(m => m.name).join(", ")}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ── Tareas sin tocar ── */}
+            {(() => {
+              const untouchedTasks = data.ministries.flatMap(m =>
+                m.tasks.filter(t => !t.done).map(t => ({ ...t, ministry: m }))
+              );
+              return untouchedTasks.length > 0 && (
+                <div style={{ marginBottom: 24 }}>
+                  <div className="label">Tareas pendientes sin completar ({untouchedTasks.length})</div>
+                  <div className="card" style={{ padding: "8px 18px" }}>
+                    {untouchedTasks.map(t => (
+                      <div key={`${t.ministry.id}-${t.id}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: `1px solid ${B.border}` }}>
+                        <span style={{ fontSize: "0.85rem", flexShrink: 0 }}>{t.ministry.icon}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: "0.78rem", color: B.textSub, lineHeight: 1.5 }}>{t.text}</div>
+                          <div style={{ fontSize: "0.58rem", color: B.textMuted, marginTop: 2, fontWeight: "600" }}>
+                            {t.ministry.name} · {t.ministry.responsible}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -881,25 +975,87 @@ export default function SemperDashboard() {
           <div className="fi">
             <div className="label">Fechas clave</div>
             <div className="card" style={{ padding: "4px 18px" }}>
-              {data.events.map(e => (
-                <div key={e.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderBottom: `1px solid ${B.border}`, gap: 10 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <div className={`cb${e.done ? " on" : ""}`} style={{ cursor: "pointer" }} onClick={() => toggleEvent(e.id)}>
-                      {e.done && <span style={{ color: "#0f0e0c", fontSize: "0.65rem", fontWeight: "900" }}>✓</span>}
+              {data.events.map(ev => (
+                <div key={ev.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderBottom: `1px solid ${B.border}`, gap: 10 }}>
+                  {editingEvent?.eId === ev.id ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
+                      <input className="inline-edit" value={editingEvent.name} autoFocus placeholder="Nombre del evento"
+                        onChange={e => setEditingEvent({ ...editingEvent, name: e.target.value })}
+                        onKeyDown={e => { if (e.key === "Enter") editEvent(ev.id); if (e.key === "Escape") setEditingEvent(null); }}
+                      />
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input className="inline-edit" value={editingEvent.date} placeholder="Fecha" style={{ flex: 1 }}
+                          onChange={e => setEditingEvent({ ...editingEvent, date: e.target.value })}
+                          onKeyDown={e => { if (e.key === "Enter") editEvent(ev.id); if (e.key === "Escape") setEditingEvent(null); }}
+                        />
+                        <div style={{ display: "flex", gap: 4 }}>
+                          {["high", "medium"].map(p => (
+                            <button key={p} className="sbtn" onClick={() => setEditingEvent({ ...editingEvent, priority: p })} style={{
+                              borderColor: priCfg[p].color, fontSize: "0.58rem", padding: "3px 8px",
+                              color: editingEvent.priority === p ? "#fff" : priCfg[p].color,
+                              background: editingEvent.priority === p ? priCfg[p].color : "transparent",
+                            }}>{priCfg[p].label}</button>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button className="save-check" onClick={() => editEvent(ev.id)} title="Guardar">✓</button>
+                        <button className="cancel-edit" onClick={() => setEditingEvent(null)} title="Cancelar">✕</button>
+                      </div>
                     </div>
-                    <div>
-                      <div style={{ fontSize: "0.9rem", color: e.done ? B.textMuted : B.text, textDecoration: e.done ? "line-through" : "none", fontWeight: "600" }}>{e.name}</div>
-                      <div style={{ fontSize: "0.67rem", color: B.textMuted, marginTop: 3, fontWeight: "600" }}>{e.date}</div>
-                    </div>
-                  </div>
-                  <span className="pill" style={{
-                    background: e.done ? "rgba(100,100,100,0.1)" : `${priCfg[e.priority]?.color}1a`,
-                    color: e.done ? B.textMuted : priCfg[e.priority]?.color, flexShrink: 0,
-                  }}>
-                    {e.done ? "✓ Hecho" : priCfg[e.priority]?.label}
-                  </span>
+                  ) : (
+                    <>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
+                        <div className={`cb${ev.done ? " on" : ""}`} style={{ cursor: "pointer" }} onClick={() => toggleEvent(ev.id)}>
+                          {ev.done && <span style={{ color: "#0f0e0c", fontSize: "0.65rem", fontWeight: "900" }}>✓</span>}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: "0.9rem", color: ev.done ? B.textMuted : B.text, textDecoration: ev.done ? "line-through" : "none", fontWeight: "600" }}>{ev.name}</div>
+                          <div style={{ fontSize: "0.67rem", color: B.textMuted, marginTop: 3, fontWeight: "600" }}>{ev.date}</div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span className="pill" style={{
+                          background: ev.done ? "rgba(100,100,100,0.1)" : `${priCfg[ev.priority]?.color}1a`,
+                          color: ev.done ? B.textMuted : priCfg[ev.priority]?.color, flexShrink: 0,
+                        }}>
+                          {ev.done ? "✓ Hecho" : priCfg[ev.priority]?.label}
+                        </span>
+                        <button className="edit-pencil" onClick={() => setEditingEvent({ eId: ev.id, name: ev.name, date: ev.date, priority: ev.priority })} title="Editar">✎</button>
+                        <button className="del-x" onClick={() => requestDeleteEvent(ev.id)} title="Eliminar">✕</button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
+            </div>
+            {/* Add event */}
+            <div className="card" style={{ padding: "14px 18px", marginTop: 12 }}>
+              <div className="label" style={{ marginBottom: 10 }}>Añadir evento</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div className="add-row" style={{ marginTop: 0 }}>
+                  <input className="add-input" placeholder="Nombre del evento..." value={newEvent.name}
+                    onChange={e => setNewEvent({ ...newEvent, name: e.target.value })}
+                    onKeyDown={e => { if (e.key === "Enter" && newEvent.name.trim()) addEvent(); }}
+                  />
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input className="add-input" placeholder="Fecha..." value={newEvent.date} style={{ flex: 1 }}
+                    onChange={e => setNewEvent({ ...newEvent, date: e.target.value })}
+                    onKeyDown={e => { if (e.key === "Enter" && newEvent.name.trim()) addEvent(); }}
+                  />
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {["high", "medium"].map(p => (
+                      <button key={p} className="sbtn" onClick={() => setNewEvent({ ...newEvent, priority: p })} style={{
+                        borderColor: priCfg[p].color, fontSize: "0.58rem", padding: "3px 8px",
+                        color: newEvent.priority === p ? "#fff" : priCfg[p].color,
+                        background: newEvent.priority === p ? priCfg[p].color : "transparent",
+                      }}>{priCfg[p].label}</button>
+                    ))}
+                  </div>
+                  <button className="add-btn" disabled={!newEvent.name.trim()} onClick={addEvent}>+</button>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -910,9 +1066,9 @@ export default function SemperDashboard() {
       {confirmDelete && (
         <div className="confirm-overlay" onClick={() => setConfirmDelete(null)}>
           <div className="confirm-box" onClick={e => e.stopPropagation()}>
-            <div className="icon">{confirmDelete.type === "task" ? "🗑️" : "⚠️"}</div>
+            <div className="icon">{confirmDelete.type === "event" ? "◇" : confirmDelete.type === "task" ? "🗑️" : "⚠️"}</div>
             <div className="msg">
-              {confirmDelete.type === "task" ? "¿Eliminar esta tarea?" : "¿Eliminar esta alerta?"}
+              {confirmDelete.type === "task" ? "¿Eliminar esta tarea?" : confirmDelete.type === "alert" ? "¿Eliminar esta alerta?" : "¿Eliminar este evento?"}
             </div>
             <div className="item-text">{confirmDelete.text}</div>
             <div className="confirm-btns">
