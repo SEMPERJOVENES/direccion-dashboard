@@ -140,6 +140,7 @@ const priCfg = {
 const TABS = [
   { id: "overview",     label: "General",      icon: "⬡" },
   { id: "ministerios",  label: "Ministerios",  icon: "⬢" },
+  { id: "personas",     label: "Personas",     icon: "👤" },
   { id: "comunidades",  label: "Comunidades",  icon: "◎" },
   { id: "eventos",      label: "Eventos",      icon: "◇" },
   { id: "admin",        label: "Admin",        icon: "⚙" },
@@ -394,6 +395,9 @@ export default function SemperDashboard() {
   const [newTaskText, setNewTaskText] = useState("");
   const [newAlertText, setNewAlertText] = useState("");
 
+  // Personas state
+  const [activePerson, setActivePerson] = useState(null);
+
   const saveTimer = useRef(null);
 
   // Load from Supabase on mount (fallback to localStorage for migration)
@@ -490,6 +494,30 @@ export default function SemperDashboard() {
   const ministry = activeMinistry ? data.ministries.find(m => m.id === activeMinistry) : null;
   const managedMinistry = manageMinistry ? data.ministries.find(m => m.id === manageMinistry) : null;
 
+  // ── Personas computed ──
+  const personsMap = {};
+  data.ministries.forEach(m => {
+    const name = m.responsible;
+    if (!personsMap[name]) {
+      personsMap[name] = { name, ministries: [], totalTasks: 0, doneTasks: 0, alerts: 0 };
+    }
+    personsMap[name].ministries.push(m);
+    personsMap[name].totalTasks += m.tasks.length;
+    personsMap[name].doneTasks += m.tasks.filter(t => t.done).length;
+    personsMap[name].alerts += m.alerts.length;
+  });
+  // Also add community coordinators
+  data.communities.forEach(c => {
+    const name = c.coordinator;
+    if (!personsMap[name]) {
+      personsMap[name] = { name, ministries: [], totalTasks: 0, doneTasks: 0, alerts: 0 };
+    }
+    if (!personsMap[name].community) personsMap[name].community = [];
+    personsMap[name].community.push(c);
+  });
+  const persons = Object.values(personsMap).sort((a, b) => b.totalTasks - a.totalTasks);
+  const personDetail = activePerson ? personsMap[activePerson] : null;
+
   // ── Admin handlers ──
   const handlePassSubmit = () => {
     if (passInput === ADMIN_PASS) {
@@ -572,7 +600,7 @@ export default function SemperDashboard() {
         backdropFilter: "blur(10px)",
       }}>
         {TABS.map(tab => (
-          <button key={tab.id} className="tabtn" onClick={() => { setActiveTab(tab.id); setActiveMinistry(null); }}>
+          <button key={tab.id} className="tabtn" onClick={() => { setActiveTab(tab.id); setActiveMinistry(null); setActivePerson(null); }}>
             <span style={{ fontSize: "1rem", opacity: activeTab === tab.id ? 1 : 0.3, color: activeTab === tab.id ? B.orange : B.textSub }}>
               {tab.icon}
             </span>
@@ -755,6 +783,141 @@ export default function SemperDashboard() {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ═══════ PERSONAS LIST ═══════ */}
+        {activeTab === "personas" && !personDetail && (
+          <div className="fi">
+            <div className="label">Toca una persona para ver sus tareas</div>
+            <div className="mg">
+              {persons.map(p => {
+                const pct = p.totalTasks > 0 ? Math.round((p.doneTasks / p.totalTasks) * 100) : 0;
+                const mainColor = p.ministries.length > 0 ? p.ministries[0].color : B.textSub;
+                return (
+                  <div key={p.name} className="mcard card" onClick={() => setActivePerson(p.name)} style={{ padding: "16px 18px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                      <span style={{ fontSize: "1.3rem" }}>👤</span>
+                      {p.alerts > 0 && (
+                        <span className="pill" style={{ background: "rgba(245,101,101,0.12)", color: "#f56565" }}>
+                          {p.alerts} ⚠
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: "0.88rem", color: mainColor, marginBottom: 2, fontWeight: "700" }}>{p.name}</div>
+                    <div style={{ fontSize: "0.63rem", color: B.textMuted, marginBottom: 13, fontWeight: "600" }}>
+                      {p.ministries.map(m => m.name).join(", ")}
+                      {p.community ? (p.ministries.length > 0 ? " · " : "") + p.community.map(c => c.name).join(", ") : ""}
+                    </div>
+                    {p.totalTasks > 0 && (
+                      <>
+                        <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 3, marginBottom: 5 }}>
+                          <div style={{ height: "100%", width: `${pct}%`, background: mainColor, borderRadius: 3, opacity: 0.85, boxShadow: `0 0 6px ${mainColor}88` }} />
+                        </div>
+                        <div style={{ fontSize: "0.63rem", color: B.textMuted, fontWeight: "600" }}>{p.doneTasks}/{p.totalTasks} · {pct}%</div>
+                      </>
+                    )}
+                    {p.totalTasks === 0 && p.community && (
+                      <div style={{ fontSize: "0.63rem", color: B.textMuted, fontWeight: "600" }}>Coordinador/a de comunidad</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════ PERSONA DETAIL ═══════ */}
+        {activeTab === "personas" && personDetail && (
+          <div className="fi">
+            <button className="backbtn" onClick={() => setActivePerson(null)}>← Todas las personas</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 22 }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 12,
+                background: "rgba(245,130,10,0.12)", border: `1.5px solid ${B.orange}44`,
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem",
+              }}>👤</div>
+              <div>
+                <div style={{ fontSize: "1.05rem", color: B.orange, fontWeight: "700" }}>{personDetail.name}</div>
+                <div style={{ fontSize: "0.7rem", color: B.textMuted, marginTop: 2, fontWeight: "600" }}>
+                  {personDetail.doneTasks}/{personDetail.totalTasks} tareas completadas
+                  {personDetail.alerts > 0 && ` · ${personDetail.alerts} alertas`}
+                </div>
+              </div>
+            </div>
+
+            {/* Per-ministry tasks */}
+            {personDetail.ministries.map(m => {
+              const mDone = m.tasks.filter(t => t.done).length;
+              const mPct = m.tasks.length > 0 ? Math.round((mDone / m.tasks.length) * 100) : 0;
+              return (
+                <div key={m.id} className="card" style={{ padding: "18px 20px", marginBottom: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                    <span style={{ fontSize: "1.1rem" }}>{m.icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "0.85rem", color: m.color, fontWeight: "700" }}>{m.name}</div>
+                      <div style={{ fontSize: "0.6rem", color: B.textMuted, fontWeight: "600" }}>{mDone}/{m.tasks.length} · {mPct}%</div>
+                    </div>
+                    <div style={{ width: 40, height: 40, borderRadius: "50%", border: `2px solid ${m.color}44`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ fontSize: "0.7rem", color: m.color, fontWeight: "700" }}>{mPct}%</span>
+                    </div>
+                  </div>
+
+                  {/* Tasks */}
+                  <div className="label" style={{ fontSize: "0.58rem" }}>Tareas</div>
+                  {m.tasks.map(task => (
+                    <div key={task.id} className="taskrow" style={{ justifyContent: "space-between" }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, flex: 1, cursor: "pointer" }} onClick={() => toggleTask(m.id, task.id)}>
+                        <div className={`cb${task.done ? " on" : ""}`}>
+                          {task.done && <span style={{ color: "#0f0e0c", fontSize: "0.65rem", fontWeight: "900" }}>✓</span>}
+                        </div>
+                        <span style={{
+                          fontSize: "0.82rem", lineHeight: 1.55,
+                          color: task.done ? B.textMuted : B.textSub,
+                          textDecoration: task.done ? "line-through" : "none",
+                        }}>{task.text}</span>
+                      </div>
+                      {adminUnlocked && (
+                        <button className="del-x" onClick={(e) => { e.stopPropagation(); deleteTask(m.id, task.id); }} title="Eliminar tarea">✕</button>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Alerts for this ministry */}
+                  {m.alerts.length > 0 && (
+                    <div style={{ marginTop: 14 }}>
+                      <div className="label" style={{ fontSize: "0.58rem", color: "#f56565" }}>⚠ Alertas</div>
+                      {m.alerts.map((a, i) => (
+                        <div key={i} className="alerti" style={{ justifyContent: "space-between" }}>
+                          <span style={{ flex: 1 }}>{a}</span>
+                          {adminUnlocked && (
+                            <button className="del-x" onClick={() => deleteAlert(m.id, i)} title="Eliminar alerta">✕</button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Communities they coordinate */}
+            {personDetail.community && personDetail.community.length > 0 && (
+              <div className="card" style={{ padding: "18px 20px", marginBottom: 14 }}>
+                <div className="label">Comunidades que coordina</div>
+                {personDetail.community.map(c => (
+                  <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${B.border}` }}>
+                    <div>
+                      <div style={{ fontSize: "0.88rem", fontWeight: "600" }}>{c.name}</div>
+                      <div style={{ fontSize: "0.72rem", color: B.textMuted, marginTop: 3 }}>{c.note}</div>
+                    </div>
+                    <span className="pill" style={{ background: statusCfg[c.status].bg, color: statusCfg[c.status].color, flexShrink: 0 }}>
+                      {statusCfg[c.status].label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
