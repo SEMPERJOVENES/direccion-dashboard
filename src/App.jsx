@@ -143,13 +143,6 @@ const TABS = [
   { id: "personas",     label: "Personas",     icon: "👤" },
   { id: "comunidades",  label: "Comunidades",  icon: "◎" },
   { id: "eventos",      label: "Eventos",      icon: "◇" },
-  { id: "admin",        label: "Admin",        icon: "⚙" },
-];
-const ADMIN_PASS = import.meta.env.VITE_ADMIN_PASS;
-const ADMIN_SUBS = [
-  { id: "reunion",   label: "Reunión",   icon: "📋" },
-  { id: "gestionar", label: "Gestionar", icon: "✏️" },
-  { id: "historial", label: "Historial", icon: "📜" },
 ];
 
 const Flame = ({ size = 28 }) => (
@@ -160,124 +153,6 @@ const Flame = ({ size = 28 }) => (
   </svg>
 );
 
-// ── Ministry name aliases for matching ──
-const MINISTRY_ALIASES = {
-  formacion: ["formación", "formacion"],
-  ad_intra: ["ad intra", "adintra", "ad-intra"],
-  misa_tabor: ["misa y tabor", "misa", "tabor"],
-  acc: ["a contra corriente", "acc", "contracorriente", "a contracorriente"],
-  comunicaciones: ["comunicaciones", "comunicación", "comunicacion", "cc", "comms"],
-  ceu: ["ceu"],
-  economia: ["economía", "economia"],
-  brand: ["brand", "marca"],
-};
-
-const ALERT_KEYWORDS = [
-  "urgente", "problema", "falta", "pendiente", "atención", "atencion",
-  "ojo", "cuidado", "resolver", "preocupa", "mal", "poco", "poca",
-  "necesita", "necesitan", "tarda", "retraso", "bloquea", "riesgo",
-];
-
-// ── Smart parser: extract items from free-form meeting text ──
-function smartParseMeeting(raw, ministries) {
-  const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
-  const items = []; // { id, ministry (id), text, type: "tarea"|"alerta", removed: false }
-  let currentMinistry = null;
-  let uid = 0;
-
-  for (const line of lines) {
-    // Try to detect ministry header
-    const cleanLine = line.toLowerCase().replace(/[:#\-*•→\d.)(]/g, "").trim();
-
-    let foundMinistry = null;
-    for (const [mId, aliases] of Object.entries(MINISTRY_ALIASES)) {
-      for (const alias of aliases) {
-        if (cleanLine === alias || cleanLine.startsWith(alias + " ") || cleanLine.endsWith(" " + alias)) {
-          foundMinistry = mId;
-          break;
-        }
-      }
-      if (foundMinistry) break;
-    }
-
-    // Also check actual ministry names
-    if (!foundMinistry) {
-      for (const m of ministries) {
-        if (cleanLine === m.name.toLowerCase() || cleanLine.startsWith(m.name.toLowerCase())) {
-          foundMinistry = m.id;
-          break;
-        }
-      }
-    }
-
-    if (foundMinistry) {
-      currentMinistry = foundMinistry;
-      continue;
-    }
-
-    // Extract task/alert text
-    const bulletMatch = line.match(/^[-*•·]\s*(.*)/);
-    const numberedMatch = line.match(/^\d+[.)]\s*(.*)/);
-    let text = bulletMatch ? bulletMatch[1].trim() : numberedMatch ? numberedMatch[1].trim() : null;
-
-    // If no bullet but we have a current ministry and the line looks like content
-    if (!text && currentMinistry && line.length > 5 && line.length < 200 && !line.endsWith(":")) {
-      text = line;
-    }
-
-    if (!text || text.length < 3) continue;
-    if (!currentMinistry) continue;
-
-    // Determine if it's an alert or a task
-    const lower = text.toLowerCase();
-    const isAlert = ALERT_KEYWORDS.some(kw => lower.includes(kw));
-
-    uid++;
-    items.push({
-      id: uid,
-      ministry: currentMinistry,
-      text,
-      type: isAlert ? "alerta" : "tarea",
-      removed: false,
-    });
-  }
-
-  return items;
-}
-
-function applyParsedItems(data, items) {
-  const now = new Date().toLocaleDateString("es-ES");
-  const activeItems = items.filter(i => !i.removed);
-
-  const newMinistries = data.ministries.map(m => {
-    const mItems = activeItems.filter(i => i.ministry === m.id);
-    const newTasks = mItems.filter(i => i.type === "tarea");
-    const newAlerts = mItems.filter(i => i.type === "alerta");
-
-    let tasks = [...m.tasks];
-    let maxId = tasks.reduce((a, t) => Math.max(a, t.id), 0);
-
-    for (const nt of newTasks) {
-      const exists = tasks.some(t => t.text.toLowerCase() === nt.text.toLowerCase());
-      if (!exists) {
-        maxId++;
-        tasks.push({ id: maxId, text: nt.text, done: false });
-      }
-    }
-
-    let alerts = [...m.alerts];
-    for (const na of newAlerts) {
-      const exists = alerts.some(a => a.toLowerCase() === na.text.toLowerCase());
-      if (!exists) {
-        alerts.push(na.text);
-      }
-    }
-
-    return { ...m, tasks, alerts };
-  });
-
-  return { ...data, ministries: newMinistries };
-}
 
 // ── CSS Styles ──
 const STYLES = `
@@ -316,28 +191,8 @@ const STYLES = `
   }
   @media(min-width:860px){.dg{grid-template-columns:3fr 2fr;}}
 
-  /* Admin styles */
-  .admin-input{background:rgba(255,255,255,0.06);border:1.5px solid ${B.border};border-radius:10px;color:${B.text};font-family:inherit;font-size:0.85rem;padding:10px 14px;outline:none;transition:border-color 0.2s;width:100%;}
-  .admin-input:focus{border-color:${B.orange};}
-  .admin-input::placeholder{color:${B.textMuted};}
-  .admin-btn{background:${B.orange};border:none;border-radius:10px;color:#fff;font-family:inherit;font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:10px 22px;cursor:pointer;transition:all 0.2s;}
-  .admin-btn:hover{background:${B.orangeLight};}
-  .admin-btn:disabled{opacity:0.4;cursor:default;}
-  .admin-btn-outline{background:none;border:1.5px solid ${B.orange};border-radius:10px;color:${B.orange};font-family:inherit;font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:10px 22px;cursor:pointer;transition:all 0.2s;}
-  .admin-btn-outline:hover{background:rgba(245,130,10,0.1);}
-  .admin-textarea{background:rgba(255,255,255,0.06);border:1.5px solid ${B.border};border-radius:10px;color:${B.text};font-family:'Courier New',monospace;font-size:0.78rem;padding:14px;outline:none;transition:border-color 0.2s;width:100%;min-height:180px;resize:vertical;line-height:1.6;}
-  .admin-textarea:focus{border-color:${B.orange};}
-  .admin-textarea::placeholder{color:${B.textMuted};}
   .deleted-row{display:flex;align-items:flex-start;gap:10px;padding:9px 6px;border-bottom:1px solid rgba(255,255,255,0.03);opacity:0.5;}
   .deleted-row:last-child{border-bottom:none;}
-  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
-  .shake{animation:shake 0.3s ease;}
-
-  /* Admin sub-tabs */
-  .admin-subtabs{display:flex;gap:4px;margin-bottom:20px;background:rgba(255,255,255,0.03);border-radius:12px;padding:4px;}
-  .admin-subtab{flex:1;background:none;border:none;cursor:pointer;font-family:inherit;font-size:0.7rem;font-weight:600;letter-spacing:0.05em;color:${B.textMuted};padding:10px 8px;border-radius:9px;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px;}
-  .admin-subtab.active{background:rgba(245,130,10,0.15);color:${B.orange};}
-  .admin-subtab:hover:not(.active){background:rgba(255,255,255,0.04);}
 
   /* Delete X button */
   .del-x{background:none;border:none;cursor:pointer;color:${B.textMuted};font-size:0.75rem;padding:2px 6px;border-radius:4px;transition:all 0.15s;line-height:1;flex-shrink:0;}
@@ -351,26 +206,6 @@ const STYLES = `
   .add-btn{background:${B.orange};border:none;border-radius:8px;color:#fff;font-size:0.85rem;font-weight:700;padding:0 14px;cursor:pointer;transition:all 0.2s;flex-shrink:0;}
   .add-btn:hover{background:${B.orangeLight};}
   .add-btn:disabled{opacity:0.3;cursor:default;}
-
-  /* Preview editable row */
-  .preview-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.04);border-radius:6px;transition:background 0.15s;}
-  .preview-item:hover{background:rgba(255,255,255,0.03);}
-  .preview-item.removed{opacity:0.25;text-decoration:line-through;}
-  .preview-edit{background:none;border:none;color:${B.text};font-family:inherit;font-size:0.78rem;flex:1;outline:none;padding:4px 0;}
-  .preview-edit:focus{border-bottom:1px solid ${B.orange};}
-  .preview-select{background:rgba(255,255,255,0.06);border:1px solid ${B.border};border-radius:6px;color:${B.text};font-family:inherit;font-size:0.65rem;padding:4px 6px;outline:none;cursor:pointer;}
-  .preview-select option{background:${B.bg};color:${B.text};}
-  .type-toggle{background:none;border:1px solid;border-radius:12px;font-size:0.58rem;font-weight:700;letter-spacing:0.05em;padding:2px 8px;cursor:pointer;font-family:inherit;transition:all 0.15s;text-transform:uppercase;white-space:nowrap;}
-
-  /* Ministry selector */
-  .ministry-selector{background:rgba(255,255,255,0.06);border:1.5px solid ${B.border};border-radius:10px;color:${B.text};font-family:inherit;font-size:0.85rem;padding:10px 14px;outline:none;width:100%;cursor:pointer;transition:border-color 0.2s;appearance:none;-webkit-appearance:none;}
-  .ministry-selector:focus{border-color:${B.orange};}
-  .ministry-selector option{background:${B.bg};color:${B.text};}
-
-  /* Manage item row */
-  .manage-row{display:flex;align-items:center;gap:10px;padding:10px 8px;border-bottom:1px solid rgba(255,255,255,0.04);border-radius:6px;transition:background 0.15s;}
-  .manage-row:hover{background:rgba(255,255,255,0.03);}
-  .manage-row:last-child{border-bottom:none;}
 
   /* Inline edit */
   .inline-edit{background:rgba(255,255,255,0.06);border:1.5px solid ${B.orange};border-radius:6px;color:${B.text};font-family:inherit;font-size:0.82rem;padding:6px 10px;outline:none;flex:1;line-height:1.5;}
@@ -387,22 +222,6 @@ export default function SemperDashboard() {
   const [activeMinistry, setActiveMinistry] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [loaded, setLoaded] = useState(false);
-
-  // Admin state
-  const [adminUnlocked, setAdminUnlocked] = useState(false);
-  const [passInput, setPassInput] = useState("");
-  const [passError, setPassError] = useState(false);
-  const [adminSub, setAdminSub] = useState("reunion");
-
-  // Meeting (Reunión) state
-  const [meetingText, setMeetingText] = useState("");
-  const [parsedItems, setParsedItems] = useState(null); // array of { id, ministry, text, type, removed }
-  const [updateApplied, setUpdateApplied] = useState(false);
-
-  // Gestionar state
-  const [manageMinistry, setManageMinistry] = useState("");
-  const [newTaskText, setNewTaskText] = useState("");
-  const [newAlertText, setNewAlertText] = useState("");
 
   // Personas state
   const [activePerson, setActivePerson] = useState(null);
@@ -525,7 +344,6 @@ export default function SemperDashboard() {
   const totalAlerts = data.ministries.reduce((a, m) => a + m.alerts.length, 0);
   const progress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
   const ministry = activeMinistry ? data.ministries.find(m => m.id === activeMinistry) : null;
-  const managedMinistry = manageMinistry ? data.ministries.find(m => m.id === manageMinistry) : null;
 
   // ── Personas computed ──
   const personsMap = {};
@@ -550,45 +368,6 @@ export default function SemperDashboard() {
   });
   const persons = Object.values(personsMap).sort((a, b) => b.totalTasks - a.totalTasks);
   const personDetail = activePerson ? personsMap[activePerson] : null;
-
-  // ── Admin handlers ──
-  const handlePassSubmit = () => {
-    if (passInput === ADMIN_PASS) {
-      setAdminUnlocked(true);
-      setPassError(false);
-    } else {
-      setPassError(true);
-      setTimeout(() => setPassError(false), 1500);
-    }
-    setPassInput("");
-  };
-
-  const handleParse = () => {
-    if (!meetingText.trim()) return;
-    const items = smartParseMeeting(meetingText, data.ministries);
-    setParsedItems(items);
-    setUpdateApplied(false);
-  };
-
-  const handleApplyParsed = () => {
-    if (!parsedItems) return;
-    const now = new Date().toLocaleDateString("es-ES");
-    const newData = applyParsedItems(data, parsedItems);
-    newData.meetingLog = [...(newData.meetingLog || []), { date: now, raw: meetingText }];
-    save(newData);
-    setParsedItems(null);
-    setMeetingText("");
-    setUpdateApplied(true);
-    setTimeout(() => setUpdateApplied(false), 3000);
-  };
-
-  const updateParsedItem = (itemId, field, value) => {
-    setParsedItems(prev => prev.map(i => i.id === itemId ? { ...i, [field]: value } : i));
-  };
-
-  const toggleParsedRemoved = (itemId) => {
-    setParsedItems(prev => prev.map(i => i.id === itemId ? { ...i, removed: !i.removed } : i));
-  };
 
   // ── Loading ──
   if (!loaded) return (
@@ -703,9 +482,7 @@ export default function SemperDashboard() {
                         <strong style={{ color: "#f56565", fontWeight: "600" }}>{m.name}</strong> — {a}
                       </span>
                     </div>
-                    {adminUnlocked && (
-                      <button className="del-x" onClick={() => deleteAlert(m.id, i)} title="Eliminar alerta">✕</button>
-                    )}
+                    <button className="del-x" onClick={() => deleteAlert(m.id, i)} title="Eliminar alerta">✕</button>
                   </div>
                 )))}
               </div>
@@ -785,25 +562,21 @@ export default function SemperDashboard() {
                             textDecoration: task.done ? "line-through" : "none",
                           }}>{task.text}</span>
                         </div>
-                        {adminUnlocked && (
-                          <div style={{ display: "flex", gap: 2 }}>
+                        <div style={{ display: "flex", gap: 2 }}>
                             <button className="edit-pencil" onClick={(e) => { e.stopPropagation(); setEditingTask({ mId: ministry.id, tId: task.id, text: task.text }); }} title="Editar">✎</button>
                             <button className="del-x" onClick={(e) => { e.stopPropagation(); deleteTask(ministry.id, task.id); }} title="Eliminar">✕</button>
                           </div>
-                        )}
                       </>
                     )}
                   </div>
                 ))}
-                {adminUnlocked && (
-                  <div className="add-row">
+                <div className="add-row">
                     <input className="add-input" placeholder="Añadir tarea..." value={inlineNewTask[ministry.id] || ""}
                       onChange={e => setInlineNewTask({ ...inlineNewTask, [ministry.id]: e.target.value })}
                       onKeyDown={e => { if (e.key === "Enter" && (inlineNewTask[ministry.id] || "").trim()) { addTask(ministry.id, inlineNewTask[ministry.id]); setInlineNewTask({ ...inlineNewTask, [ministry.id]: "" }); } }}
                     />
                     <button className="add-btn" disabled={!(inlineNewTask[ministry.id] || "").trim()} onClick={() => { addTask(ministry.id, inlineNewTask[ministry.id]); setInlineNewTask({ ...inlineNewTask, [ministry.id]: "" }); }}>+</button>
                   </div>
-                )}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <div className="card" style={{ padding: "18px 20px" }}>
@@ -823,25 +596,21 @@ export default function SemperDashboard() {
                       ) : (
                         <>
                           <span style={{ flex: 1 }}>{a}</span>
-                          {adminUnlocked && (
-                            <div style={{ display: "flex", gap: 2 }}>
+                          <div style={{ display: "flex", gap: 2 }}>
                               <button className="edit-pencil" onClick={() => setEditingAlert({ mId: ministry.id, idx: i, text: a })} title="Editar">✎</button>
                               <button className="del-x" onClick={() => deleteAlert(ministry.id, i)} title="Eliminar">✕</button>
                             </div>
-                          )}
                         </>
                       )}
                     </div>
                   ))}
-                  {adminUnlocked && (
-                    <div className="add-row">
+                  <div className="add-row">
                       <input className="add-input" placeholder="Añadir alerta..." value={inlineNewAlert[ministry.id] || ""}
                         onChange={e => setInlineNewAlert({ ...inlineNewAlert, [ministry.id]: e.target.value })}
                         onKeyDown={e => { if (e.key === "Enter" && (inlineNewAlert[ministry.id] || "").trim()) { addAlert(ministry.id, inlineNewAlert[ministry.id]); setInlineNewAlert({ ...inlineNewAlert, [ministry.id]: "" }); } }}
                       />
                       <button className="add-btn" disabled={!(inlineNewAlert[ministry.id] || "").trim()} onClick={() => { addAlert(ministry.id, inlineNewAlert[ministry.id]); setInlineNewAlert({ ...inlineNewAlert, [ministry.id]: "" }); }}>+</button>
                     </div>
-                  )}
                 </div>
                 {ministry.futureVision && (
                   <div className="card" style={{ padding: "18px 20px" }}>
@@ -970,25 +739,21 @@ export default function SemperDashboard() {
                               textDecoration: task.done ? "line-through" : "none",
                             }}>{task.text}</span>
                           </div>
-                          {adminUnlocked && (
-                            <div style={{ display: "flex", gap: 2 }}>
+                          <div style={{ display: "flex", gap: 2 }}>
                               <button className="edit-pencil" onClick={(e) => { e.stopPropagation(); setEditingTask({ mId: m.id, tId: task.id, text: task.text }); }} title="Editar">✎</button>
                               <button className="del-x" onClick={(e) => { e.stopPropagation(); deleteTask(m.id, task.id); }} title="Eliminar">✕</button>
                             </div>
-                          )}
                         </>
                       )}
                     </div>
                   ))}
-                  {adminUnlocked && (
-                    <div className="add-row">
+                  <div className="add-row">
                       <input className="add-input" placeholder="Añadir tarea..." value={inlineNewTask[m.id] || ""}
                         onChange={e => setInlineNewTask({ ...inlineNewTask, [m.id]: e.target.value })}
                         onKeyDown={e => { if (e.key === "Enter" && (inlineNewTask[m.id] || "").trim()) { addTask(m.id, inlineNewTask[m.id]); setInlineNewTask({ ...inlineNewTask, [m.id]: "" }); } }}
                       />
                       <button className="add-btn" disabled={!(inlineNewTask[m.id] || "").trim()} onClick={() => { addTask(m.id, inlineNewTask[m.id]); setInlineNewTask({ ...inlineNewTask, [m.id]: "" }); }}>+</button>
                     </div>
-                  )}
 
                   {/* Alerts for this ministry */}
                   <div style={{ marginTop: 14 }}>
@@ -1008,25 +773,21 @@ export default function SemperDashboard() {
                         ) : (
                           <>
                             <span style={{ flex: 1 }}>{a}</span>
-                            {adminUnlocked && (
-                              <div style={{ display: "flex", gap: 2 }}>
+                            <div style={{ display: "flex", gap: 2 }}>
                                 <button className="edit-pencil" onClick={() => setEditingAlert({ mId: m.id, idx: i, text: a })} title="Editar">✎</button>
                                 <button className="del-x" onClick={() => deleteAlert(m.id, i)} title="Eliminar">✕</button>
                               </div>
-                            )}
                           </>
                         )}
                       </div>
                     ))}
-                    {adminUnlocked && (
-                      <div className="add-row">
+                    <div className="add-row">
                         <input className="add-input" placeholder="Añadir alerta..." value={inlineNewAlert[m.id] || ""}
                           onChange={e => setInlineNewAlert({ ...inlineNewAlert, [m.id]: e.target.value })}
                           onKeyDown={e => { if (e.key === "Enter" && (inlineNewAlert[m.id] || "").trim()) { addAlert(m.id, inlineNewAlert[m.id]); setInlineNewAlert({ ...inlineNewAlert, [m.id]: "" }); } }}
                         />
                         <button className="add-btn" disabled={!(inlineNewAlert[m.id] || "").trim()} onClick={() => { addAlert(m.id, inlineNewAlert[m.id]); setInlineNewAlert({ ...inlineNewAlert, [m.id]: "" }); }}>+</button>
                       </div>
-                    )}
                   </div>
                 </div>
               );
@@ -1112,283 +873,6 @@ export default function SemperDashboard() {
           </div>
         )}
 
-        {/* ═══════ ADMIN ═══════ */}
-        {activeTab === "admin" && (
-          <div className="fi">
-            {!adminUnlocked ? (
-              /* ── Password gate ── */
-              <div style={{ maxWidth: 360, margin: "60px auto", textAlign: "center" }}>
-                <div style={{ fontSize: "2rem", marginBottom: 16 }}>⚙</div>
-                <div style={{ fontSize: "0.9rem", color: B.textSub, marginBottom: 24, fontWeight: "600" }}>Panel de Administración</div>
-                <div style={{ display: "flex", gap: 10 }}>
-                  <input
-                    className={`admin-input${passError ? " shake" : ""}`}
-                    type="password" placeholder="Contraseña"
-                    value={passInput}
-                    onChange={e => setPassInput(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && handlePassSubmit()}
-                    style={passError ? { borderColor: "#f56565" } : {}}
-                  />
-                  <button className="admin-btn" onClick={handlePassSubmit}>Entrar</button>
-                </div>
-                {passError && <div style={{ color: "#f56565", fontSize: "0.72rem", marginTop: 10 }}>Contraseña incorrecta</div>}
-              </div>
-            ) : (
-              <div>
-                {/* Header + logout */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                  <div>
-                    <div style={{ fontSize: "0.95rem", fontWeight: "700" }}>Panel de Administración</div>
-                    <div style={{ fontSize: "0.65rem", color: B.textMuted, marginTop: 3 }}>Gestiona tareas, alertas y notas de reunión</div>
-                  </div>
-                  <button className="admin-btn-outline" onClick={() => setAdminUnlocked(false)} style={{ fontSize: "0.6rem", padding: "6px 14px" }}>
-                    Cerrar sesión
-                  </button>
-                </div>
-
-                {/* Sub-tabs */}
-                <div className="admin-subtabs">
-                  {ADMIN_SUBS.map(s => (
-                    <button key={s.id} className={`admin-subtab${adminSub === s.id ? " active" : ""}`} onClick={() => setAdminSub(s.id)}>
-                      <span>{s.icon}</span> {s.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* ────── REUNIÓN ────── */}
-                {adminSub === "reunion" && (
-                  <div>
-                    <div className="card" style={{ padding: "20px", marginBottom: 16 }}>
-                      <div className="label">Pegar acta o transcripción de reunión</div>
-                      <div style={{ fontSize: "0.7rem", color: B.textMuted, marginBottom: 14, lineHeight: 1.6 }}>
-                        Pega el texto de la reunión. El sistema detectará automáticamente los ministerios mencionados
-                        y extraerá tareas y alertas. Podrás revisarlas y editarlas antes de aplicar.
-                      </div>
-                      <textarea
-                        className="admin-textarea"
-                        placeholder={"Pega aquí el acta de la reunión...\n\nEjemplo:\nFormación:\n- Grabar video para YouTube\n- Urgente: nadie se graba\n\nBrand:\n- Contactar nuevo proveedor\n- Pendiente: subir colecciones"}
-                        value={meetingText}
-                        onChange={e => { setMeetingText(e.target.value); setParsedItems(null); setUpdateApplied(false); }}
-                      />
-                      <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-                        <button className="admin-btn" onClick={handleParse} disabled={!meetingText.trim()}>
-                          Analizar texto
-                        </button>
-                      </div>
-                      {updateApplied && (
-                        <div style={{ color: "#5ec47a", fontSize: "0.75rem", marginTop: 10, fontWeight: "600" }}>
-                          ✓ Cambios aplicados correctamente
-                        </div>
-                      )}
-                    </div>
-
-                    {/* ── Editable preview ── */}
-                    {parsedItems && (
-                      <div className="card" style={{ padding: "20px", marginBottom: 16 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                          <div className="label" style={{ color: B.orange, marginBottom: 0 }}>
-                            Vista previa — {parsedItems.filter(i => !i.removed).length} items detectados
-                          </div>
-                          <button className="admin-btn" onClick={handleApplyParsed} disabled={parsedItems.filter(i => !i.removed).length === 0}>
-                            Aplicar cambios
-                          </button>
-                        </div>
-                        {parsedItems.length === 0 && (
-                          <div style={{ fontSize: "0.78rem", color: B.textMuted, padding: "20px 0", textAlign: "center" }}>
-                            No se detectaron tareas ni alertas. Prueba a estructurar el texto con nombres de ministerio como encabezados.
-                          </div>
-                        )}
-                        {parsedItems.map(item => {
-                          const m = data.ministries.find(mm => mm.id === item.ministry);
-                          return (
-                            <div key={item.id} className={`preview-item${item.removed ? " removed" : ""}`}>
-                              {/* Type toggle */}
-                              <button
-                                className="type-toggle"
-                                onClick={() => updateParsedItem(item.id, "type", item.type === "tarea" ? "alerta" : "tarea")}
-                                style={{
-                                  borderColor: item.type === "alerta" ? "#f56565" : "#5ec47a",
-                                  color: item.type === "alerta" ? "#f56565" : "#5ec47a",
-                                }}
-                              >
-                                {item.type === "alerta" ? "⚠ Alerta" : "✓ Tarea"}
-                              </button>
-
-                              {/* Ministry selector */}
-                              <select
-                                className="preview-select"
-                                value={item.ministry}
-                                onChange={e => updateParsedItem(item.id, "ministry", e.target.value)}
-                              >
-                                {data.ministries.map(mm => (
-                                  <option key={mm.id} value={mm.id}>{mm.icon} {mm.name}</option>
-                                ))}
-                              </select>
-
-                              {/* Editable text */}
-                              <input
-                                className="preview-edit"
-                                value={item.text}
-                                onChange={e => updateParsedItem(item.id, "text", e.target.value)}
-                              />
-
-                              {/* Remove/restore */}
-                              <button
-                                className="del-x"
-                                onClick={() => toggleParsedRemoved(item.id)}
-                                title={item.removed ? "Restaurar" : "Quitar"}
-                                style={item.removed ? { color: "#5ec47a" } : {}}
-                              >
-                                {item.removed ? "↩" : "✕"}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* ────── GESTIONAR ────── */}
-                {adminSub === "gestionar" && (
-                  <div>
-                    {/* Ministry selector */}
-                    <div style={{ marginBottom: 18, position: "relative" }}>
-                      <div className="label">Seleccionar ministerio</div>
-                      <select
-                        className="ministry-selector"
-                        value={manageMinistry}
-                        onChange={e => { setManageMinistry(e.target.value); setNewTaskText(""); setNewAlertText(""); }}
-                      >
-                        <option value="">— Elige un ministerio —</option>
-                        {data.ministries.map(m => (
-                          <option key={m.id} value={m.id}>{m.icon} {m.name} ({m.responsible})</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {managedMinistry && (
-                      <>
-                        {/* Ministry header */}
-                        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-                          <div style={{
-                            width: 42, height: 42, borderRadius: 10,
-                            background: `${managedMinistry.color}1a`, border: `1.5px solid ${managedMinistry.color}44`,
-                            display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem",
-                          }}>{managedMinistry.icon}</div>
-                          <div>
-                            <div style={{ fontSize: "0.95rem", color: managedMinistry.color, fontWeight: "700" }}>{managedMinistry.name}</div>
-                            <div style={{ fontSize: "0.65rem", color: B.textMuted, fontWeight: "600" }}>{managedMinistry.responsible}</div>
-                          </div>
-                        </div>
-
-                        {/* Tasks */}
-                        <div className="card" style={{ padding: "18px 20px", marginBottom: 14 }}>
-                          <div className="label">Tareas ({managedMinistry.tasks.length})</div>
-                          {managedMinistry.tasks.map(task => (
-                            <div key={task.id} className="manage-row">
-                              <div
-                                className={`cb${task.done ? " on" : ""}`}
-                                style={{ cursor: "pointer" }}
-                                onClick={() => toggleTask(managedMinistry.id, task.id)}
-                              >
-                                {task.done && <span style={{ color: "#0f0e0c", fontSize: "0.65rem", fontWeight: "900" }}>✓</span>}
-                              </div>
-                              <span style={{
-                                flex: 1, fontSize: "0.82rem", lineHeight: 1.5,
-                                color: task.done ? B.textMuted : B.textSub,
-                                textDecoration: task.done ? "line-through" : "none",
-                              }}>{task.text}</span>
-                              <button className="del-x" onClick={() => deleteTask(managedMinistry.id, task.id)} title="Eliminar tarea">✕</button>
-                            </div>
-                          ))}
-                          <div className="add-row">
-                            <input
-                              className="add-input"
-                              placeholder="Nueva tarea..."
-                              value={newTaskText}
-                              onChange={e => setNewTaskText(e.target.value)}
-                              onKeyDown={e => { if (e.key === "Enter" && newTaskText.trim()) { addTask(managedMinistry.id, newTaskText); setNewTaskText(""); } }}
-                            />
-                            <button className="add-btn" disabled={!newTaskText.trim()} onClick={() => { addTask(managedMinistry.id, newTaskText); setNewTaskText(""); }}>+</button>
-                          </div>
-                        </div>
-
-                        {/* Alerts */}
-                        <div className="card" style={{ padding: "18px 20px", marginBottom: 14 }}>
-                          <div className="label" style={{ color: "#f56565" }}>⚠ Alertas ({managedMinistry.alerts.length})</div>
-                          {managedMinistry.alerts.length === 0 && (
-                            <div style={{ fontSize: "0.75rem", color: B.textMuted, padding: "6px 0" }}>Sin alertas</div>
-                          )}
-                          {managedMinistry.alerts.map((a, i) => (
-                            <div key={i} className="manage-row">
-                              <span style={{ fontSize: "0.72rem", color: "#f56565", flexShrink: 0 }}>⚠</span>
-                              <span style={{ flex: 1, fontSize: "0.82rem", color: B.textSub, lineHeight: 1.5 }}>{a}</span>
-                              <button className="del-x" onClick={() => deleteAlert(managedMinistry.id, i)} title="Eliminar alerta">✕</button>
-                            </div>
-                          ))}
-                          <div className="add-row">
-                            <input
-                              className="add-input"
-                              placeholder="Nueva alerta..."
-                              value={newAlertText}
-                              onChange={e => setNewAlertText(e.target.value)}
-                              onKeyDown={e => { if (e.key === "Enter" && newAlertText.trim()) { addAlert(managedMinistry.id, newAlertText); setNewAlertText(""); } }}
-                            />
-                            <button className="add-btn" disabled={!newAlertText.trim()} onClick={() => { addAlert(managedMinistry.id, newAlertText); setNewAlertText(""); }}>+</button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {/* ────── HISTORIAL ────── */}
-                {adminSub === "historial" && (
-                  <div>
-                    {(data.meetingLog || []).length > 0 && (
-                      <div className="card" style={{ padding: "20px", marginBottom: 16 }}>
-                        <div className="label">Historial de reuniones</div>
-                        {[...(data.meetingLog || [])].reverse().map((log, i) => (
-                          <div key={i} style={{ padding: "10px 0", borderBottom: `1px solid ${B.border}` }}>
-                            <div style={{ fontSize: "0.7rem", color: B.orange, fontWeight: "600", marginBottom: 6 }}>{log.date}</div>
-                            <pre style={{
-                              fontSize: "0.68rem", color: B.textMuted, whiteSpace: "pre-wrap", wordBreak: "break-word",
-                              fontFamily: "'Courier New', monospace", lineHeight: 1.5, margin: 0,
-                              maxHeight: 120, overflow: "hidden",
-                            }}>{log.raw}</pre>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {(data.meetingLog || []).length === 0 && (
-                      <div style={{ textAlign: "center", padding: "40px 0", color: B.textMuted, fontSize: "0.8rem" }}>
-                        No hay reuniones registradas todavía.
-                      </div>
-                    )}
-
-                    {(data.deletedTasks || []).length > 0 && (
-                      <div className="card" style={{ padding: "20px" }}>
-                        <div className="label" style={{ color: B.textMuted }}>Todas las tareas eliminadas</div>
-                        {(data.deletedTasks || []).map((dt, i) => (
-                          <div key={i} className="deleted-row">
-                            <span style={{ color: B.textMuted, fontSize: "0.7rem" }}>✕</span>
-                            <div>
-                              <span style={{ fontSize: "0.72rem", color: B.textMuted, textDecoration: "line-through" }}>{dt.text}</span>
-                              <div style={{ fontSize: "0.58rem", color: B.textMuted, marginTop: 2 }}>
-                                {dt.ministryName} · Eliminada el {dt.deletedAt}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* FOOTER */}
@@ -1398,7 +882,7 @@ export default function SemperDashboard() {
       }}>
         <Flame size={14} />
         <span style={{ fontSize: "0.57rem", color: B.textMuted, letterSpacing: "0.15em", fontWeight: "600" }}>
-          SEMPER · JÓVENES MADRID · {adminUnlocked ? "🔓 Admin activo · " : ""}Guardado automático
+          SEMPER · JÓVENES MADRID · Guardado automático
         </span>
       </div>
     </div>
