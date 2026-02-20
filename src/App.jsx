@@ -215,6 +215,18 @@ const STYLES = `
   .save-check:hover{background:rgba(94,196,122,0.15);}
   .cancel-edit{background:none;border:none;cursor:pointer;color:${B.textMuted};font-size:0.7rem;padding:2px 5px;border-radius:4px;transition:all 0.15s;flex-shrink:0;}
   .cancel-edit:hover{color:#f56565;}
+
+  /* Confirm delete modal */
+  .confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);animation:fi 0.15s ease;}
+  .confirm-box{background:${B.bg};border:1.5px solid ${B.border};border-radius:16px;padding:24px 28px;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.4);}
+  .confirm-box .icon{font-size:1.6rem;margin-bottom:12px;}
+  .confirm-box .msg{font-size:0.82rem;color:${B.textSub};line-height:1.6;margin-bottom:8px;}
+  .confirm-box .item-text{font-size:0.78rem;color:${B.text};background:rgba(255,255,255,0.05);border-radius:8px;padding:8px 12px;margin-bottom:18px;line-height:1.5;word-break:break-word;}
+  .confirm-btns{display:flex;gap:10px;justify-content:center;}
+  .confirm-btns .btn-cancel{background:rgba(255,255,255,0.06);border:1px solid ${B.border};border-radius:10px;color:${B.textSub};font-family:inherit;font-size:0.72rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;padding:9px 20px;cursor:pointer;transition:all 0.2s;}
+  .confirm-btns .btn-cancel:hover{background:rgba(255,255,255,0.1);}
+  .confirm-btns .btn-delete{background:#f56565;border:none;border-radius:10px;color:#fff;font-family:inherit;font-size:0.72rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;padding:9px 20px;cursor:pointer;transition:all 0.2s;}
+  .confirm-btns .btn-delete:hover{background:#e04545;}
 `;
 
 export default function SemperDashboard() {
@@ -231,6 +243,9 @@ export default function SemperDashboard() {
   const [editingAlert, setEditingAlert] = useState(null); // { mId, idx, text }
   const [inlineNewTask, setInlineNewTask] = useState({}); // { [mId]: text }
   const [inlineNewAlert, setInlineNewAlert] = useState({}); // { [mId]: text }
+
+  // Confirm delete state: { type: "task"|"alert", mId, tId?, idx?, text }
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   const saveTimer = useRef(null);
 
@@ -281,23 +296,39 @@ export default function SemperDashboard() {
   const toggleEvent = (eId)       => save({ ...data, events: data.events.map(e => e.id === eId ? { ...e, done: !e.done } : e) });
   const setCommSt   = (cId, s)    => save({ ...data, communities: data.communities.map(c => c.id === cId ? { ...c, status: s } : c) });
 
-  const deleteTask = (mId, tId) => {
+  const requestDeleteTask = (mId, tId) => {
     const m = data.ministries.find(mm => mm.id === mId);
     const task = m?.tasks.find(t => t.id === tId);
     if (!m || !task) return;
-    const now = new Date().toLocaleDateString("es-ES");
-    save({
-      ...data,
-      ministries: data.ministries.map(mm => mm.id === mId ? { ...mm, tasks: mm.tasks.filter(t => t.id !== tId) } : mm),
-      deletedTasks: [...(data.deletedTasks || []), { ministryId: mId, ministryName: m.name, text: task.text, wasDone: task.done, deletedAt: now }],
-    });
+    setConfirmDelete({ type: "task", mId, tId, text: task.text });
   };
 
-  const deleteAlert = (mId, alertIdx) => {
-    save({
-      ...data,
-      ministries: data.ministries.map(m => m.id === mId ? { ...m, alerts: m.alerts.filter((_, i) => i !== alertIdx) } : m),
-    });
+  const requestDeleteAlert = (mId, idx) => {
+    const m = data.ministries.find(mm => mm.id === mId);
+    if (!m || idx >= m.alerts.length) return;
+    setConfirmDelete({ type: "alert", mId, idx, text: m.alerts[idx] });
+  };
+
+  const executeDelete = () => {
+    if (!confirmDelete) return;
+    if (confirmDelete.type === "task") {
+      const m = data.ministries.find(mm => mm.id === confirmDelete.mId);
+      const task = m?.tasks.find(t => t.id === confirmDelete.tId);
+      if (m && task) {
+        const now = new Date().toLocaleDateString("es-ES");
+        save({
+          ...data,
+          ministries: data.ministries.map(mm => mm.id === confirmDelete.mId ? { ...mm, tasks: mm.tasks.filter(t => t.id !== confirmDelete.tId) } : mm),
+          deletedTasks: [...(data.deletedTasks || []), { ministryId: confirmDelete.mId, ministryName: m.name, text: task.text, wasDone: task.done, deletedAt: now }],
+        });
+      }
+    } else if (confirmDelete.type === "alert") {
+      save({
+        ...data,
+        ministries: data.ministries.map(m => m.id === confirmDelete.mId ? { ...m, alerts: m.alerts.filter((_, i) => i !== confirmDelete.idx) } : m),
+      });
+    }
+    setConfirmDelete(null);
   };
 
   const addTask = (mId, text) => {
@@ -482,7 +513,7 @@ export default function SemperDashboard() {
                         <strong style={{ color: "#f56565", fontWeight: "600" }}>{m.name}</strong> — {a}
                       </span>
                     </div>
-                    <button className="del-x" onClick={() => deleteAlert(m.id, i)} title="Eliminar alerta">✕</button>
+                    <button className="del-x" onClick={() => requestDeleteAlert(m.id, i)} title="Eliminar alerta">✕</button>
                   </div>
                 )))}
               </div>
@@ -564,7 +595,7 @@ export default function SemperDashboard() {
                         </div>
                         <div style={{ display: "flex", gap: 2 }}>
                             <button className="edit-pencil" onClick={(e) => { e.stopPropagation(); setEditingTask({ mId: ministry.id, tId: task.id, text: task.text }); }} title="Editar">✎</button>
-                            <button className="del-x" onClick={(e) => { e.stopPropagation(); deleteTask(ministry.id, task.id); }} title="Eliminar">✕</button>
+                            <button className="del-x" onClick={(e) => { e.stopPropagation(); requestDeleteTask(ministry.id, task.id); }} title="Eliminar">✕</button>
                           </div>
                       </>
                     )}
@@ -598,7 +629,7 @@ export default function SemperDashboard() {
                           <span style={{ flex: 1 }}>{a}</span>
                           <div style={{ display: "flex", gap: 2 }}>
                               <button className="edit-pencil" onClick={() => setEditingAlert({ mId: ministry.id, idx: i, text: a })} title="Editar">✎</button>
-                              <button className="del-x" onClick={() => deleteAlert(ministry.id, i)} title="Eliminar">✕</button>
+                              <button className="del-x" onClick={() => requestDeleteAlert(ministry.id, i)} title="Eliminar">✕</button>
                             </div>
                         </>
                       )}
@@ -741,7 +772,7 @@ export default function SemperDashboard() {
                           </div>
                           <div style={{ display: "flex", gap: 2 }}>
                               <button className="edit-pencil" onClick={(e) => { e.stopPropagation(); setEditingTask({ mId: m.id, tId: task.id, text: task.text }); }} title="Editar">✎</button>
-                              <button className="del-x" onClick={(e) => { e.stopPropagation(); deleteTask(m.id, task.id); }} title="Eliminar">✕</button>
+                              <button className="del-x" onClick={(e) => { e.stopPropagation(); requestDeleteTask(m.id, task.id); }} title="Eliminar">✕</button>
                             </div>
                         </>
                       )}
@@ -775,7 +806,7 @@ export default function SemperDashboard() {
                             <span style={{ flex: 1 }}>{a}</span>
                             <div style={{ display: "flex", gap: 2 }}>
                                 <button className="edit-pencil" onClick={() => setEditingAlert({ mId: m.id, idx: i, text: a })} title="Editar">✎</button>
-                                <button className="del-x" onClick={() => deleteAlert(m.id, i)} title="Eliminar">✕</button>
+                                <button className="del-x" onClick={() => requestDeleteAlert(m.id, i)} title="Eliminar">✕</button>
                               </div>
                           </>
                         )}
@@ -874,6 +905,23 @@ export default function SemperDashboard() {
         )}
 
       </div>
+
+      {/* CONFIRM DELETE MODAL */}
+      {confirmDelete && (
+        <div className="confirm-overlay" onClick={() => setConfirmDelete(null)}>
+          <div className="confirm-box" onClick={e => e.stopPropagation()}>
+            <div className="icon">{confirmDelete.type === "task" ? "🗑️" : "⚠️"}</div>
+            <div className="msg">
+              {confirmDelete.type === "task" ? "¿Eliminar esta tarea?" : "¿Eliminar esta alerta?"}
+            </div>
+            <div className="item-text">{confirmDelete.text}</div>
+            <div className="confirm-btns">
+              <button className="btn-cancel" onClick={() => setConfirmDelete(null)}>No</button>
+              <button className="btn-delete" onClick={executeDelete}>Sí, eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* FOOTER */}
       <div style={{
