@@ -143,6 +143,14 @@ const TABS = [
   { id: "personas",     label: "Personas",     icon: "👤" },
   { id: "comunidades",  label: "Comunidades",  icon: "◎" },
   { id: "eventos",      label: "Eventos",      icon: "◇" },
+  { id: "actividad",    label: "Actividad",    icon: "📊" },
+];
+
+const PERIOD_OPTIONS = [
+  { id: "7d",  label: "7 días",   days: 7 },
+  { id: "30d", label: "30 días",  days: 30 },
+  { id: "90d", label: "3 meses",  days: 90 },
+  { id: "all", label: "Todo",     days: 9999 },
 ];
 
 const Flame = ({ size = 28 }) => (
@@ -152,6 +160,43 @@ const Flame = ({ size = 28 }) => (
     <circle cx="24" cy="30" r="3" fill="white" fillOpacity="0.5"/>
   </svg>
 );
+
+const SEMPER_USERS = ["Stefano", "Pat", "Guillem", "Marta G.", "Alfonso", "Blanca", "Ori", "Agustín", "Leya"];
+
+function UserPicker({ onPick }) {
+  const [custom, setCustom] = useState('');
+  return (
+    <div style={{ background: B.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 24, padding: '24px', fontFamily: "'Trebuchet MS', 'Segoe UI', sans-serif" }}>
+      <style>{`*{box-sizing:border-box;margin:0;padding:0;}`}</style>
+      <Flame size={40} />
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: '0.68rem', letterSpacing: '0.22em', color: B.textMuted, textTransform: 'uppercase', fontWeight: 700, marginBottom: 8 }}>SEMPER · PANEL DE DIRECCIÓN</div>
+        <div style={{ fontSize: '1.1rem', color: B.text, fontWeight: 600 }}>¿Quién eres?</div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, width: '100%', maxWidth: 360 }}>
+        {SEMPER_USERS.map(u => (
+          <button key={u} onClick={() => onPick(u)}
+            style={{ background: B.bgCard, border: `1px solid ${B.border}`, borderRadius: 10, color: B.text, fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 600, padding: '12px 8px', cursor: 'pointer', transition: 'all 0.15s' }}>
+            {u}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 360 }}>
+        <input
+          value={custom}
+          onChange={e => setCustom(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && custom.trim() && onPick(custom.trim())}
+          placeholder="Otro nombre..."
+          style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: `1px solid ${B.border}`, borderRadius: 8, color: B.text, fontFamily: 'inherit', fontSize: '0.82rem', padding: '10px 12px', outline: 'none' }}
+        />
+        <button onClick={() => custom.trim() && onPick(custom.trim())}
+          style={{ background: B.orange, border: 'none', borderRadius: 8, color: '#fff', fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 700, padding: '10px 16px', cursor: 'pointer' }}>
+          OK
+        </button>
+      </div>
+    </div>
+  );
+}
 
 
 // ── CSS Styles ──
@@ -227,6 +272,20 @@ const STYLES = `
   .confirm-btns .btn-cancel:hover{background:rgba(255,255,255,0.1);}
   .confirm-btns .btn-delete{background:#f56565;border:none;border-radius:10px;color:#fff;font-family:inherit;font-size:0.72rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;padding:9px 20px;cursor:pointer;transition:all 0.2s;}
   .confirm-btns .btn-delete:hover{background:#e04545;}
+
+  /* Activity tab */
+  .period-tabs{display:flex;gap:4px;margin-bottom:18px;background:rgba(255,255,255,0.03);border-radius:10px;padding:3px;}
+  .period-tab{flex:1;background:none;border:none;cursor:pointer;font-family:inherit;font-size:0.65rem;font-weight:700;letter-spacing:0.04em;color:${B.textMuted};padding:8px 6px;border-radius:8px;transition:all 0.2s;text-align:center;}
+  .period-tab.active{background:rgba(245,130,10,0.15);color:${B.orange};}
+  .period-tab:hover:not(.active){background:rgba(255,255,255,0.04);}
+  .act-stat{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid ${B.border};}
+  .act-stat:last-child{border-bottom:none;}
+  .act-bar{height:6px;background:rgba(255,255,255,0.06);border-radius:3px;flex:1;overflow:hidden;}
+  .act-bar-fill{height:100%;border-radius:3px;transition:width 0.4s;}
+  .act-feed-day{font-size:0.62rem;color:${B.orange};font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:14px 0 6px;border-bottom:1px solid rgba(245,130,10,0.15);}
+  .act-feed-item{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.03);font-size:0.76rem;}
+  .act-feed-item:last-child{border-bottom:none;}
+  .act-badge{display:inline-flex;padding:2px 7px;border-radius:10px;font-size:0.55rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;}
 `;
 
 export default function SemperDashboard() {
@@ -251,7 +310,13 @@ export default function SemperDashboard() {
   // Confirm delete state: { type: "task"|"alert"|"event", mId?, tId?, idx?, eId?, text }
   const [confirmDelete, setConfirmDelete] = useState(null);
 
+  // Activity tab state
+  const [activityData, setActivityData] = useState([]);
+  const [activityPeriod, setActivityPeriod] = useState("30d");
+  const [activityLoading, setActivityLoading] = useState(false);
+
   const saveTimer = useRef(null);
+  const [currentUser, setCurrentUser] = useState(() => localStorage.getItem('semper_user') || null);
 
   // Load from Supabase on mount (fallback to localStorage for migration)
   useEffect(() => {
@@ -281,8 +346,28 @@ export default function SemperDashboard() {
     })();
   }, []);
 
+  // Fetch activity when Actividad tab is active or period changes
+  useEffect(() => {
+    if (activeTab !== "actividad") return;
+    setActivityLoading(true);
+    const period = PERIOD_OPTIONS.find(p => p.id === activityPeriod);
+    const since = new Date();
+    since.setDate(since.getDate() - (period?.days || 30));
+    (async () => {
+      try {
+        let query = supabase.from("semper_activity").select("*").order("created_at", { ascending: false });
+        if (activityPeriod !== "all") {
+          query = query.gte("created_at", since.toISOString());
+        }
+        const { data: rows } = await query.limit(500);
+        setActivityData(rows || []);
+      } catch (_) {}
+      setActivityLoading(false);
+    })();
+  }, [activeTab, activityPeriod]);
+
   // Debounced save to Supabase
-  const save = useCallback((d) => {
+  const save = useCallback((d, action = '', detail = '') => {
     setData(d);
     // Immediate localStorage backup
     try { localStorage.setItem("semper_v6", JSON.stringify(d)); } catch (_) {}
@@ -293,11 +378,31 @@ export default function SemperDashboard() {
         await supabase.from("semper_state").upsert({ id: "main", data: d, updated_at: new Date().toISOString() });
       } catch (_) {}
     }, 300);
+    // Log activity
+    const user = localStorage.getItem('semper_user');
+    if (action && user) {
+      supabase.from("semper_activity").insert({ user_name: user, action, detail }).catch(() => {});
+    }
   }, []);
 
   // ── CRUD helpers ──
-  const toggleTask  = (mId, tId) => save({ ...data, ministries: data.ministries.map(m => m.id === mId ? { ...m, tasks: m.tasks.map(t => t.id === tId ? { ...t, done: !t.done } : t) } : m) });
-  const toggleEvent = (eId)       => save({ ...data, events: data.events.map(e => e.id === eId ? { ...e, done: !e.done } : e) });
+  const toggleTask = (mId, tId) => {
+    const m = data.ministries.find(mm => mm.id === mId);
+    const t = m?.tasks.find(tt => tt.id === tId);
+    save(
+      { ...data, ministries: data.ministries.map(mm => mm.id === mId ? { ...mm, tasks: mm.tasks.map(tt => tt.id === tId ? { ...tt, done: !tt.done } : tt) } : mm) },
+      t?.done ? 'task_undone' : 'task_done',
+      `${t?.text || ''} — ${m?.name || ''}`
+    );
+  };
+  const toggleEvent = (eId) => {
+    const ev = data.events.find(e => e.id === eId);
+    save(
+      { ...data, events: data.events.map(e => e.id === eId ? { ...e, done: !e.done } : e) },
+      ev?.done ? 'event_undone' : 'event_done',
+      ev?.name || ''
+    );
+  };
   const setCommSt   = (cId, s)    => save({ ...data, communities: data.communities.map(c => c.id === cId ? { ...c, status: s } : c) });
 
   const requestDeleteTask = (mId, tId) => {
@@ -324,7 +429,7 @@ export default function SemperDashboard() {
           ...data,
           ministries: data.ministries.map(mm => mm.id === confirmDelete.mId ? { ...mm, tasks: mm.tasks.filter(t => t.id !== confirmDelete.tId) } : mm),
           deletedTasks: [...(data.deletedTasks || []), { ministryId: confirmDelete.mId, ministryName: m.name, text: task.text, wasDone: task.done, deletedAt: now }],
-        });
+        }, 'task_deleted', `${task.text} — ${m.name}`);
       }
     } else if (confirmDelete.type === "alert") {
       save({
@@ -342,22 +447,24 @@ export default function SemperDashboard() {
 
   const addTask = (mId, text) => {
     if (!text.trim()) return;
+    const m = data.ministries.find(mm => mm.id === mId);
     save({
       ...data,
-      ministries: data.ministries.map(m => {
-        if (m.id !== mId) return m;
-        const maxId = m.tasks.reduce((a, t) => Math.max(a, t.id), 0);
-        return { ...m, tasks: [...m.tasks, { id: maxId + 1, text: text.trim(), done: false }] };
+      ministries: data.ministries.map(mm => {
+        if (mm.id !== mId) return mm;
+        const maxId = mm.tasks.reduce((a, t) => Math.max(a, t.id), 0);
+        return { ...mm, tasks: [...mm.tasks, { id: maxId + 1, text: text.trim(), done: false }] };
       }),
-    });
+    }, 'task_added', `${text.trim()} — ${m?.name || ''}`);
   };
 
   const addAlert = (mId, text) => {
     if (!text.trim()) return;
+    const m = data.ministries.find(mm => mm.id === mId);
     save({
       ...data,
-      ministries: data.ministries.map(m => m.id === mId ? { ...m, alerts: [...m.alerts, text.trim()] } : m),
-    });
+      ministries: data.ministries.map(mm => mm.id === mId ? { ...mm, alerts: [...mm.alerts, text.trim()] } : mm),
+    }, 'alert_added', `${text.trim()} — ${m?.name || ''}`);
   };
 
   const editTask = (mId, tId, newText) => {
@@ -385,7 +492,7 @@ export default function SemperDashboard() {
     save({
       ...data,
       events: [...data.events, { id: maxId + 1, name: newEvent.name.trim(), date: newEvent.date.trim() || "Sin fecha", priority: newEvent.priority, done: false }],
-    });
+    }, 'event_added', newEvent.name.trim());
     setNewEvent({ name: "", date: "", priority: "medium" });
   };
 
@@ -435,6 +542,11 @@ export default function SemperDashboard() {
   const persons = Object.values(personsMap).sort((a, b) => b.totalTasks - a.totalTasks);
   const personDetail = activePerson ? personsMap[activePerson] : null;
 
+  // ── User picker ──
+  if (!currentUser) return (
+    <UserPicker onPick={(name) => { localStorage.setItem('semper_user', name); setCurrentUser(name); }} />
+  );
+
   // ── Loading ──
   if (!loaded) return (
     <div style={{ background: B.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
@@ -468,6 +580,10 @@ export default function SemperDashboard() {
         <div style={{ marginLeft: "auto", textAlign: "right" }}>
           <div style={{ fontSize: "1.15rem", color: B.orange, fontWeight: "700", lineHeight: 1 }}>{progress}%</div>
           <div style={{ fontSize: "0.57rem", color: B.textMuted, marginTop: 3, letterSpacing: "0.05em" }}>{doneTasks}/{totalTasks} tareas</div>
+          <button onClick={() => { localStorage.removeItem('semper_user'); setCurrentUser(null); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.textMuted, fontSize: '0.58rem', letterSpacing: '0.04em', fontFamily: 'inherit', padding: 0, marginTop: 4 }}>
+            {currentUser} ×
+          </button>
         </div>
       </div>
 
@@ -1057,6 +1173,155 @@ export default function SemperDashboard() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ═══════ ACTIVIDAD ═══════ */}
+        {activeTab === "actividad" && (
+          <div className="fi">
+            <div className="label">Registro de actividad</div>
+
+            {/* Period selector */}
+            <div className="period-tabs">
+              {PERIOD_OPTIONS.map(p => (
+                <button key={p.id} className={`period-tab${activityPeriod === p.id ? " active" : ""}`} onClick={() => setActivityPeriod(p.id)}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {activityLoading ? (
+              <div style={{ textAlign: "center", padding: "40px 0", color: B.textMuted, fontSize: "0.8rem" }}>Cargando actividad...</div>
+            ) : activityData.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "40px 0", color: B.textMuted, fontSize: "0.8rem" }}>
+                No hay actividad registrada en este período.
+              </div>
+            ) : (() => {
+              // Compute per-user stats
+              const userStats = {};
+              activityData.forEach(a => {
+                if (!userStats[a.user_name]) userStats[a.user_name] = { name: a.user_name, total: 0, tasksDone: 0, tasksAdded: 0, tasksDeleted: 0, alertsAdded: 0, eventsDone: 0, eventsAdded: 0, lastSeen: a.created_at };
+                const u = userStats[a.user_name];
+                u.total++;
+                if (a.created_at > u.lastSeen) u.lastSeen = a.created_at;
+                if (a.action === "task_done") u.tasksDone++;
+                if (a.action === "task_added") u.tasksAdded++;
+                if (a.action === "task_deleted") u.tasksDeleted++;
+                if (a.action === "alert_added") u.alertsAdded++;
+                if (a.action === "event_done") u.eventsDone++;
+                if (a.action === "event_added") u.eventsAdded++;
+              });
+              const users = Object.values(userStats).sort((a, b) => b.total - a.total);
+              const maxActions = Math.max(...users.map(u => u.total), 1);
+
+              // Group feed by day
+              const feedByDay = {};
+              activityData.forEach(a => {
+                const day = new Date(a.created_at).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+                if (!feedByDay[day]) feedByDay[day] = [];
+                feedByDay[day].push(a);
+              });
+
+              const actionLabel = { task_done: "Tarea completada", task_undone: "Tarea desmarcada", task_added: "Tarea añadida", task_deleted: "Tarea eliminada", alert_added: "Alerta añadida", event_done: "Evento completado", event_undone: "Evento desmarcado", event_added: "Evento añadido" };
+              const actionColor = { task_done: "#5ec47a", task_undone: B.textMuted, task_added: B.orange, task_deleted: "#f56565", alert_added: "#f56565", event_done: "#5ec47a", event_undone: B.textMuted, event_added: "#60a5fa" };
+
+              return (
+                <>
+                  {/* ── Stats per person ── */}
+                  <div className="card" style={{ padding: "16px 18px", marginBottom: 16 }}>
+                    <div className="label">Actividad por persona</div>
+                    {users.map(u => {
+                      const pct = Math.round((u.total / maxActions) * 100);
+                      const ago = Math.round((Date.now() - new Date(u.lastSeen).getTime()) / (1000 * 60 * 60));
+                      const lastStr = ago < 1 ? "hace unos minutos" : ago < 24 ? `hace ${ago}h` : `hace ${Math.round(ago / 24)}d`;
+                      return (
+                        <div key={u.name} className="act-stat">
+                          <div style={{ minWidth: 80 }}>
+                            <div style={{ fontSize: "0.82rem", color: B.text, fontWeight: "700" }}>{u.name}</div>
+                            <div style={{ fontSize: "0.55rem", color: ago < 48 ? "#5ec47a" : B.textMuted, fontWeight: "600", marginTop: 2 }}>
+                              {ago < 48 ? "● " : ""}{lastStr}
+                            </div>
+                          </div>
+                          <div className="act-bar">
+                            <div className="act-bar-fill" style={{ width: `${pct}%`, background: B.orange }} />
+                          </div>
+                          <div style={{ minWidth: 30, textAlign: "right", fontSize: "0.75rem", color: B.orange, fontWeight: "700" }}>{u.total}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* ── Breakdown cards ── */}
+                  <div className="sg" style={{ marginBottom: 16 }}>
+                    {[
+                      { label: "Tareas completadas", value: activityData.filter(a => a.action === "task_done").length, color: "#5ec47a" },
+                      { label: "Tareas añadidas", value: activityData.filter(a => a.action === "task_added").length, color: B.orange },
+                      { label: "Tareas eliminadas", value: activityData.filter(a => a.action === "task_deleted").length, color: "#f56565" },
+                      { label: "Alertas añadidas", value: activityData.filter(a => a.action === "alert_added").length, color: "#60a5fa" },
+                    ].map((s, i) => (
+                      <div key={i} className="card" style={{ padding: "14px 16px", borderTop: `2px solid ${s.color}` }}>
+                        <div style={{ fontSize: "1.5rem", color: s.color, lineHeight: 1, fontWeight: "700" }}>{s.value}</div>
+                        <div style={{ fontSize: "0.58rem", color: B.textMuted, marginTop: 6, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: "600" }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Detailed per-person breakdown ── */}
+                  <div className="card" style={{ padding: "16px 18px", marginBottom: 16 }}>
+                    <div className="label">Desglose por persona</div>
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.72rem" }}>
+                        <thead>
+                          <tr style={{ borderBottom: `1px solid ${B.border}` }}>
+                            <th style={{ textAlign: "left", padding: "8px 6px", color: B.textMuted, fontWeight: 600 }}>Persona</th>
+                            <th style={{ textAlign: "center", padding: "8px 4px", color: "#5ec47a", fontWeight: 600 }}>✓ Hechas</th>
+                            <th style={{ textAlign: "center", padding: "8px 4px", color: B.orange, fontWeight: 600 }}>+ Añadidas</th>
+                            <th style={{ textAlign: "center", padding: "8px 4px", color: "#f56565", fontWeight: 600 }}>✕ Borradas</th>
+                            <th style={{ textAlign: "center", padding: "8px 4px", color: "#60a5fa", fontWeight: 600 }}>⚠ Alertas</th>
+                            <th style={{ textAlign: "center", padding: "8px 4px", color: B.textSub, fontWeight: 600 }}>Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {users.map(u => (
+                            <tr key={u.name} style={{ borderBottom: `1px solid ${B.border}` }}>
+                              <td style={{ padding: "8px 6px", color: B.text, fontWeight: 600 }}>{u.name}</td>
+                              <td style={{ textAlign: "center", padding: "8px 4px", color: "#5ec47a" }}>{u.tasksDone}</td>
+                              <td style={{ textAlign: "center", padding: "8px 4px", color: B.orange }}>{u.tasksAdded}</td>
+                              <td style={{ textAlign: "center", padding: "8px 4px", color: "#f56565" }}>{u.tasksDeleted}</td>
+                              <td style={{ textAlign: "center", padding: "8px 4px", color: "#60a5fa" }}>{u.alertsAdded}</td>
+                              <td style={{ textAlign: "center", padding: "8px 4px", color: B.textSub, fontWeight: 700 }}>{u.total}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* ── Activity feed ── */}
+                  <div className="card" style={{ padding: "16px 18px" }}>
+                    <div className="label">Historial de acciones</div>
+                    {Object.entries(feedByDay).map(([day, items]) => (
+                      <div key={day}>
+                        <div className="act-feed-day">{day}</div>
+                        {items.map((a, i) => (
+                          <div key={i} className="act-feed-item">
+                            <span className="act-badge" style={{ background: `${actionColor[a.action] || B.textMuted}1a`, color: actionColor[a.action] || B.textMuted }}>
+                              {actionLabel[a.action] || a.action}
+                            </span>
+                            <div style={{ flex: 1 }}>
+                              <span style={{ color: B.textSub }}>{a.detail}</span>
+                              <div style={{ fontSize: "0.58rem", color: B.textMuted, marginTop: 2 }}>
+                                {a.user_name} · {new Date(a.created_at).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
 
