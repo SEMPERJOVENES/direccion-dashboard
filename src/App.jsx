@@ -24,10 +24,11 @@ const B = {
 
 const INITIAL_DATA = {
   communities: [
-    { id: 1, name: "San Pablo", status: "warning", note: "Está flaqueando la asistencia", coordinator: "Pat Hidalgo" },
-    { id: 2, name: "San Ignacio", status: "good", note: "Bien, buena asistencia", coordinator: "Pauli Sánchez" },
-    { id: 3, name: "San Martín", status: "good", note: "Bien", coordinator: "Marta Giribert" },
+    { id: 1, name: "San Pablo", status: "warning", note: "Está flaqueando la asistencia", coordinator: "Pat Hidalgo", tasks: [] },
+    { id: 2, name: "San Ignacio", status: "good", note: "Bien, buena asistencia", coordinator: "Pauli Sánchez", tasks: [] },
+    { id: 3, name: "San Martín", status: "good", note: "Bien", coordinator: "Marta Giribert", tasks: [] },
   ],
+  extraPersons: [],
   ministries: [
     {
       id: "formacion", name: "Formación", responsible: "Guillem", color: B.orange, icon: "📖",
@@ -47,6 +48,16 @@ const INITIAL_DATA = {
         { id: 1, text: "Compromisos", done: false },
         { id: 2, text: "Roots", done: false },
       ],
+      alerts: [],
+    },
+    {
+      id: "administracion", name: "Administración", responsible: "Guille", color: "#a78bfa", icon: "📋",
+      tasks: [],
+      alerts: [],
+    },
+    {
+      id: "operaciones", name: "Operaciones", responsible: "Carla", color: "#f59e0b", icon: "⚙️",
+      tasks: [],
       alerts: [],
     },
     {
@@ -138,12 +149,12 @@ const priCfg = {
   medium: { color: B.orange,  label: "Media" },
 };
 const TABS = [
-  { id: "overview",     label: "General",      icon: "⬡" },
-  { id: "ministerios",  label: "Ministerios",  icon: "⬢" },
+  { id: "overview",     label: "General",      icon: "🏠" },
+  { id: "ministerios",  label: "Ministerios",  icon: "⛪" },
   { id: "personas",     label: "Personas",     icon: "👤" },
-  { id: "comunidades",  label: "Comunidades",  icon: "◎" },
-  { id: "eventos",      label: "Eventos",      icon: "◇" },
-  { id: "actividad",    label: "Actividad",    icon: "📊" },
+  { id: "comunidades",  label: "Comunidades",  icon: "🫂" },
+  { id: "eventos",      label: "Eventos",      icon: "📅" },
+  { id: "actividad",    label: "Actividad",    icon: "📈" },
 ];
 
 const PERIOD_OPTIONS = [
@@ -153,15 +164,101 @@ const PERIOD_OPTIONS = [
   { id: "all", label: "Todo",     days: 9999 },
 ];
 
+const RECURRING_FREQ = [
+  { id: "weekly",   label: "Semanal",   short: "Sem", days: 7 },
+  { id: "biweekly", label: "Quincenal", short: "Quin", days: 14 },
+  { id: "monthly",  label: "Mensual",   short: "Mens", days: 30 },
+];
+const recurringLabel = { weekly: "Semanal", biweekly: "Quincenal", monthly: "Mensual" };
+
+// Check if a recurring task should be reset (done -> undone)
+function shouldResetRecurring(task) {
+  if (!task.done || !task.recurring || !task.lastCompleted) return false;
+  const freq = RECURRING_FREQ.find(f => f.id === task.recurring);
+  if (!freq) return false;
+  const elapsed = (Date.now() - new Date(task.lastCompleted).getTime()) / (1000 * 60 * 60 * 24);
+  return elapsed >= freq.days;
+}
+
+function resetTasksInArray(tasks) {
+  if (!tasks || !tasks.length) return tasks;
+  let changed = false;
+  const result = tasks.map(t => {
+    if (shouldResetRecurring(t)) { changed = true; return { ...t, done: false }; }
+    return t;
+  });
+  return changed ? result : tasks;
+}
+
 const Flame = ({ size = 28 }) => (
-  <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
-    <path d="M24 4C24 4 34 16 34 26C34 32.627 29.627 38 24 38C18.373 38 14 32.627 14 26C14 16 24 4 24 4Z" fill="#f5820a"/>
-    <path d="M24 18C24 18 29 24 29 29C29 31.761 26.761 34 24 34C21.239 34 19 31.761 19 29C19 24 24 18 24 18Z" fill="#fbbf24"/>
-    <circle cx="24" cy="30" r="3" fill="white" fillOpacity="0.5"/>
+  <svg width={size} height={size} viewBox="0 0 48 48" fill="none" style={{ filter: "drop-shadow(0 0 6px rgba(245,130,10,0.6))" }}>
+    <defs>
+      <radialGradient id="flameGlow" cx="50%" cy="70%" r="50%">
+        <stop offset="0%" stopColor="#fff7e0" stopOpacity="0.7" />
+        <stop offset="100%" stopColor="#f5820a" stopOpacity="0" />
+      </radialGradient>
+      <linearGradient id="outerFlame" x1="0.5" y1="1" x2="0.5" y2="0">
+        <stop offset="0%" stopColor="#f5820a" />
+        <stop offset="40%" stopColor="#f59e0a" />
+        <stop offset="80%" stopColor="#e8520a" />
+        <stop offset="100%" stopColor="#c2300a" />
+      </linearGradient>
+      <linearGradient id="innerFlame" x1="0.5" y1="1" x2="0.5" y2="0">
+        <stop offset="0%" stopColor="#fbbf24" />
+        <stop offset="50%" stopColor="#fcd34d" />
+        <stop offset="100%" stopColor="#fef3c7" />
+      </linearGradient>
+    </defs>
+    {/* Glow */}
+    <circle cx="24" cy="30" r="14" fill="url(#flameGlow)">
+      <animate attributeName="r" values="13;15;13" dur="1.5s" repeatCount="indefinite" />
+      <animate attributeName="opacity" values="0.5;0.8;0.5" dur="1.5s" repeatCount="indefinite" />
+    </circle>
+    {/* Outer flame */}
+    <path fill="url(#outerFlame)">
+      <animate attributeName="d" dur="0.8s" repeatCount="indefinite" values="
+        M24 5C24 5 35 16 35 26.5C35 33 30 38 24 38C18 38 13 33 13 26.5C13 16 24 5 24 5Z;
+        M24 4C24 4 34 15 34 26C34 32.5 29.5 38.5 24 38.5C18.5 38.5 14 32.5 14 26C14 15 24 4 24 4Z;
+        M24 6C24 6 36 17 36 27C36 33.5 30.5 37.5 24 37.5C17.5 37.5 12 33.5 12 27C12 17 24 6 24 6Z;
+        M24 5C24 5 35 16 35 26.5C35 33 30 38 24 38C18 38 13 33 13 26.5C13 16 24 5 24 5Z
+      " />
+    </path>
+    {/* Mid flame */}
+    <path fill="#f59e0a" opacity="0.8">
+      <animate attributeName="d" dur="0.6s" repeatCount="indefinite" values="
+        M24 14C24 14 31 22 31 28C31 31.5 28 35 24 35C20 35 17 31.5 17 28C17 22 24 14 24 14Z;
+        M24 12C24 12 30 21 30 27.5C30 31 27.5 35.5 24 35.5C20.5 35.5 18 31 18 27.5C18 21 24 12 24 12Z;
+        M24 15C24 15 32 23 32 28.5C32 32 29 34.5 24 34.5C19 34.5 16 32 16 28.5C16 23 24 15 24 15Z;
+        M24 14C24 14 31 22 31 28C31 31.5 28 35 24 35C20 35 17 31.5 17 28C17 22 24 14 24 14Z
+      " />
+    </path>
+    {/* Inner flame */}
+    <path fill="url(#innerFlame)">
+      <animate attributeName="d" dur="0.5s" repeatCount="indefinite" values="
+        M24 20C24 20 28.5 25 28.5 29C28.5 31.5 26.5 33.5 24 33.5C21.5 33.5 19.5 31.5 19.5 29C19.5 25 24 20 24 20Z;
+        M24 19C24 19 28 24.5 28 28.5C28 31 26 34 24 34C22 34 20 31 20 28.5C20 24.5 24 19 24 19Z;
+        M24 21C24 21 29 25.5 29 29.5C29 32 27 33 24 33C21 33 19 32 19 29.5C19 25.5 24 21 24 21Z;
+        M24 20C24 20 28.5 25 28.5 29C28.5 31.5 26.5 33.5 24 33.5C21.5 33.5 19.5 31.5 19.5 29C19.5 25 24 20 24 20Z
+      " />
+    </path>
+    {/* Core bright spot */}
+    <ellipse cx="24" cy="31" rx="3" ry="4" fill="white" opacity="0.45">
+      <animate attributeName="ry" values="4;3;4" dur="0.7s" repeatCount="indefinite" />
+      <animate attributeName="opacity" values="0.4;0.6;0.4" dur="0.7s" repeatCount="indefinite" />
+    </ellipse>
+    {/* Tiny spark flickers */}
+    <circle cx="21" cy="18" r="0.8" fill="#fbbf24" opacity="0">
+      <animate attributeName="opacity" values="0;0.8;0" dur="2s" repeatCount="indefinite" begin="0s" />
+      <animate attributeName="cy" values="18;12;8" dur="2s" repeatCount="indefinite" begin="0s" />
+    </circle>
+    <circle cx="27" cy="16" r="0.6" fill="#f5820a" opacity="0">
+      <animate attributeName="opacity" values="0;0.7;0" dur="2.5s" repeatCount="indefinite" begin="0.8s" />
+      <animate attributeName="cy" values="16;10;6" dur="2.5s" repeatCount="indefinite" begin="0.8s" />
+    </circle>
   </svg>
 );
 
-const SEMPER_USERS = ["Stefano", "Pat", "Guillem", "Marta G.", "Alfonso", "Blanca", "Ori", "Agustín", "Leya"];
+const SEMPER_USERS = ["Stefano", "Guille", "Carla", "Pat", "Guillem", "Marta G.", "Alfonso", "Blanca", "Ori", "Agustín", "Leya", "Mari Tere", "Marta", "Pauli Sánchez", "Marta Giribert"];
 
 function UserPicker({ onPick }) {
   const [custom, setCustom] = useState('');
@@ -273,6 +370,16 @@ const STYLES = `
   .confirm-btns .btn-delete{background:#f56565;border:none;border-radius:10px;color:#fff;font-family:inherit;font-size:0.72rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;padding:9px 20px;cursor:pointer;transition:all 0.2s;}
   .confirm-btns .btn-delete:hover{background:#e04545;}
 
+  /* Recurring badge */
+  .rec-badge{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:10px;font-size:0.55rem;font-weight:700;letter-spacing:0.03em;background:rgba(96,165,250,0.12);color:#60a5fa;white-space:nowrap;margin-left:6px;flex-shrink:0;}
+  .rec-toggle{background:none;border:1.5px solid ${B.border};border-radius:8px;color:${B.textMuted};font-size:0.6rem;font-weight:700;padding:4px 8px;cursor:pointer;transition:all 0.2s;font-family:inherit;white-space:nowrap;flex-shrink:0;}
+  .rec-toggle:hover{border-color:#60a5fa;color:#60a5fa;}
+  .rec-toggle.active{background:rgba(96,165,250,0.15);border-color:#60a5fa;color:#60a5fa;}
+  .rec-menu{position:absolute;bottom:calc(100% + 4px);right:0;background:${B.bg};border:1.5px solid ${B.border};border-radius:10px;padding:4px;z-index:20;box-shadow:0 4px 20px rgba(0,0,0,0.4);display:flex;flex-direction:column;gap:2px;min-width:120px;}
+  .rec-opt{background:none;border:none;cursor:pointer;font-family:inherit;font-size:0.68rem;font-weight:600;color:${B.textSub};padding:7px 10px;border-radius:7px;text-align:left;transition:all 0.15s;}
+  .rec-opt:hover{background:rgba(96,165,250,0.1);color:#60a5fa;}
+  .rec-opt.sel{background:rgba(96,165,250,0.15);color:#60a5fa;}
+
   /* Activity tab */
   .period-tabs{display:flex;gap:4px;margin-bottom:18px;background:rgba(255,255,255,0.03);border-radius:10px;padding:3px;}
   .period-tab{flex:1;background:none;border:none;cursor:pointer;font-family:inherit;font-size:0.65rem;font-weight:700;letter-spacing:0.04em;color:${B.textMuted};padding:8px 6px;border-radius:8px;transition:all 0.2s;text-align:center;}
@@ -302,6 +409,9 @@ export default function SemperDashboard() {
   const [editingAlert, setEditingAlert] = useState(null); // { mId, idx, text }
   const [inlineNewTask, setInlineNewTask] = useState({}); // { [mId]: text }
   const [inlineNewAlert, setInlineNewAlert] = useState({}); // { [mId]: text }
+  const [inlineNewCommTask, setInlineNewCommTask] = useState({}); // { [cId]: text }
+  const [inlineNewExtraTask, setInlineNewExtraTask] = useState({}); // { [personName]: text }
+  const [inlineNewRecurring, setInlineNewRecurring] = useState({}); // { [key]: "weekly"|"biweekly"|"monthly"|null }
 
   // Event editing state
   const [editingEvent, setEditingEvent] = useState(null); // { eId, name, date, priority }
@@ -316,7 +426,7 @@ export default function SemperDashboard() {
   const [activityLoading, setActivityLoading] = useState(false);
 
   const saveTimer = useRef(null);
-  const [currentUser, setCurrentUser] = useState(() => localStorage.getItem('semper_user') || null);
+  const [currentUser, setCurrentUser] = useState(() => { try { return localStorage.getItem('semper_user') || null; } catch(_) { return null; } });
 
   // Load from Supabase on mount (fallback to localStorage for migration)
   useEffect(() => {
@@ -329,13 +439,16 @@ export default function SemperDashboard() {
           .single();
         if (!error && row?.data && Object.keys(row.data).length > 0) {
           const d = row.data;
-          setData({ ...INITIAL_DATA, ...d, deletedTasks: d.deletedTasks || [], meetingLog: d.meetingLog || [] });
+          // Ensure communities have tasks arrays
+          const comms = (d.communities || INITIAL_DATA.communities).map(c => ({ ...c, tasks: c.tasks || [] }));
+          setData({ ...INITIAL_DATA, ...d, communities: comms, extraPersons: d.extraPersons || INITIAL_DATA.extraPersons || [], deletedTasks: d.deletedTasks || [], meetingLog: d.meetingLog || [] });
         } else {
           // Migration: try localStorage
           const stored = localStorage.getItem("semper_v6");
           if (stored) {
             const parsed = JSON.parse(stored);
-            const merged = { ...INITIAL_DATA, ...parsed, deletedTasks: parsed.deletedTasks || [], meetingLog: parsed.meetingLog || [] };
+            const comms = (parsed.communities || INITIAL_DATA.communities).map(c => ({ ...c, tasks: c.tasks || [] }));
+            const merged = { ...INITIAL_DATA, ...parsed, communities: comms, extraPersons: parsed.extraPersons || INITIAL_DATA.extraPersons || [], deletedTasks: parsed.deletedTasks || [], meetingLog: parsed.meetingLog || [] };
             setData(merged);
             // Push to Supabase
             await supabase.from("semper_state").upsert({ id: "main", data: merged, updated_at: new Date().toISOString() });
@@ -345,6 +458,30 @@ export default function SemperDashboard() {
       setLoaded(true);
     })();
   }, []);
+
+  // Auto-reset recurring tasks on load
+  useEffect(() => {
+    if (!loaded) return;
+    let changed = false;
+    const newMinistries = data.ministries.map(m => {
+      const reset = resetTasksInArray(m.tasks);
+      if (reset !== m.tasks) { changed = true; return { ...m, tasks: reset }; }
+      return m;
+    });
+    const newComms = data.communities.map(c => {
+      const reset = resetTasksInArray(c.tasks || []);
+      if (reset !== (c.tasks || [])) { changed = true; return { ...c, tasks: reset }; }
+      return c;
+    });
+    const newExtra = (data.extraPersons || []).map(ep => {
+      const reset = resetTasksInArray(ep.tasks || []);
+      if (reset !== (ep.tasks || [])) { changed = true; return { ...ep, tasks: reset }; }
+      return ep;
+    });
+    if (changed) {
+      save({ ...data, ministries: newMinistries, communities: newComms, extraPersons: newExtra }, 'recurring_reset', 'Tareas recurrentes reiniciadas');
+    }
+  }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch activity when Actividad tab is active or period changes
   useEffect(() => {
@@ -379,7 +516,7 @@ export default function SemperDashboard() {
       } catch (_) {}
     }, 300);
     // Log activity
-    const user = localStorage.getItem('semper_user');
+    let user; try { user = localStorage.getItem('semper_user'); } catch(_) {}
     if (action && user) {
       supabase.from("semper_activity").insert({ user_name: user, action, detail }).catch(() => {});
     }
@@ -389,8 +526,9 @@ export default function SemperDashboard() {
   const toggleTask = (mId, tId) => {
     const m = data.ministries.find(mm => mm.id === mId);
     const t = m?.tasks.find(tt => tt.id === tId);
+    const nowDone = !t?.done;
     save(
-      { ...data, ministries: data.ministries.map(mm => mm.id === mId ? { ...mm, tasks: mm.tasks.map(tt => tt.id === tId ? { ...tt, done: !tt.done } : tt) } : mm) },
+      { ...data, ministries: data.ministries.map(mm => mm.id === mId ? { ...mm, tasks: mm.tasks.map(tt => tt.id === tId ? { ...tt, done: nowDone, ...(nowDone && tt.recurring ? { lastCompleted: new Date().toISOString() } : {}) } : tt) } : mm) },
       t?.done ? 'task_undone' : 'task_done',
       `${t?.text || ''} — ${m?.name || ''}`
     );
@@ -404,6 +542,87 @@ export default function SemperDashboard() {
     );
   };
   const setCommSt   = (cId, s)    => save({ ...data, communities: data.communities.map(c => c.id === cId ? { ...c, status: s } : c) });
+
+  // ── Community task CRUD ──
+  const toggleCommTask = (cId, tId) => {
+    const c = data.communities.find(cc => cc.id === cId);
+    const t = (c?.tasks || []).find(tt => tt.id === tId);
+    const nowDone = !t?.done;
+    save(
+      { ...data, communities: data.communities.map(cc => cc.id === cId ? { ...cc, tasks: (cc.tasks || []).map(tt => tt.id === tId ? { ...tt, done: nowDone, ...(nowDone && tt.recurring ? { lastCompleted: new Date().toISOString() } : {}) } : tt) } : cc) },
+      t?.done ? 'task_undone' : 'task_done',
+      `${t?.text || ''} — Comunidad ${c?.name || ''}`
+    );
+  };
+  const addCommTask = (cId, text, recurring = null) => {
+    if (!text.trim()) return;
+    const c = data.communities.find(cc => cc.id === cId);
+    save({
+      ...data,
+      communities: data.communities.map(cc => {
+        if (cc.id !== cId) return cc;
+        const tasks = cc.tasks || [];
+        const maxId = tasks.reduce((a, t) => Math.max(a, t.id), 0);
+        const newTask = { id: maxId + 1, text: text.trim(), done: false };
+        if (recurring) { newTask.recurring = recurring; newTask.lastCompleted = null; }
+        return { ...cc, tasks: [...tasks, newTask] };
+      }),
+    }, 'task_added', `${text.trim()}${recurring ? ` (${recurringLabel[recurring]})` : ''} — Comunidad ${c?.name || ''}`);
+  };
+  const editCommTask = (cId, tId, newText) => {
+    if (!newText.trim()) return;
+    const c = data.communities.find(cc => cc.id === cId);
+    save({
+      ...data,
+      communities: data.communities.map(cc => cc.id === cId ? { ...cc, tasks: (cc.tasks || []).map(t => t.id === tId ? { ...t, text: newText.trim() } : t) } : cc),
+    }, 'task_edited', `${newText.trim()} — Comunidad ${c?.name || ''}`);
+    setEditingTask(null);
+  };
+  const requestDeleteCommTask = (cId, tId) => {
+    const c = data.communities.find(cc => cc.id === cId);
+    const task = (c?.tasks || []).find(t => t.id === tId);
+    if (!c || !task) return;
+    setConfirmDelete({ type: "commTask", cId, tId, text: task.text });
+  };
+
+  // ── Extra person task CRUD ──
+  const toggleExtraTask = (personName, tId) => {
+    const ep = (data.extraPersons || []).find(p => p.name === personName);
+    const t = (ep?.tasks || []).find(tt => tt.id === tId);
+    const nowDone = !t?.done;
+    save({
+      ...data,
+      extraPersons: (data.extraPersons || []).map(p => p.name === personName ? { ...p, tasks: (p.tasks || []).map(tt => tt.id === tId ? { ...tt, done: nowDone, ...(nowDone && tt.recurring ? { lastCompleted: new Date().toISOString() } : {}) } : tt) } : p),
+    }, t?.done ? 'task_undone' : 'task_done', `${t?.text || ''} — ${personName}`);
+  };
+  const addExtraTask = (personName, text, recurring = null) => {
+    if (!text.trim()) return;
+    save({
+      ...data,
+      extraPersons: (data.extraPersons || []).map(p => {
+        if (p.name !== personName) return p;
+        const tasks = p.tasks || [];
+        const maxId = tasks.reduce((a, t) => Math.max(a, t.id), 0);
+        const newTask = { id: maxId + 1, text: text.trim(), done: false };
+        if (recurring) { newTask.recurring = recurring; newTask.lastCompleted = null; }
+        return { ...p, tasks: [...tasks, newTask] };
+      }),
+    }, 'task_added', `${text.trim()}${recurring ? ` (${recurringLabel[recurring]})` : ''} — ${personName}`);
+  };
+  const editExtraTask = (personName, tId, newText) => {
+    if (!newText.trim()) return;
+    save({
+      ...data,
+      extraPersons: (data.extraPersons || []).map(p => p.name === personName ? { ...p, tasks: (p.tasks || []).map(t => t.id === tId ? { ...t, text: newText.trim() } : t) } : p),
+    }, 'task_edited', `${newText.trim()} — ${personName}`);
+    setEditingTask(null);
+  };
+  const requestDeleteExtraTask = (personName, tId) => {
+    const ep = (data.extraPersons || []).find(p => p.name === personName);
+    const task = (ep?.tasks || []).find(t => t.id === tId);
+    if (!ep || !task) return;
+    setConfirmDelete({ type: "extraTask", personName, tId, text: task.text });
+  };
 
   const requestDeleteTask = (mId, tId) => {
     const m = data.ministries.find(mm => mm.id === mId);
@@ -441,11 +660,29 @@ export default function SemperDashboard() {
         ...data,
         events: data.events.filter(e => e.id !== confirmDelete.eId),
       });
+    } else if (confirmDelete.type === "commTask") {
+      const c = data.communities.find(cc => cc.id === confirmDelete.cId);
+      const task = (c?.tasks || []).find(t => t.id === confirmDelete.tId);
+      if (c && task) {
+        save({
+          ...data,
+          communities: data.communities.map(cc => cc.id === confirmDelete.cId ? { ...cc, tasks: (cc.tasks || []).filter(t => t.id !== confirmDelete.tId) } : cc),
+        }, 'task_deleted', `${task.text} — Comunidad ${c.name}`);
+      }
+    } else if (confirmDelete.type === "extraTask") {
+      const ep = (data.extraPersons || []).find(p => p.name === confirmDelete.personName);
+      const task = (ep?.tasks || []).find(t => t.id === confirmDelete.tId);
+      if (ep && task) {
+        save({
+          ...data,
+          extraPersons: (data.extraPersons || []).map(p => p.name === confirmDelete.personName ? { ...p, tasks: (p.tasks || []).filter(t => t.id !== confirmDelete.tId) } : p),
+        }, 'task_deleted', `${task.text} — ${ep.name}`);
+      }
     }
     setConfirmDelete(null);
   };
 
-  const addTask = (mId, text) => {
+  const addTask = (mId, text, recurring = null) => {
     if (!text.trim()) return;
     const m = data.ministries.find(mm => mm.id === mId);
     save({
@@ -453,9 +690,11 @@ export default function SemperDashboard() {
       ministries: data.ministries.map(mm => {
         if (mm.id !== mId) return mm;
         const maxId = mm.tasks.reduce((a, t) => Math.max(a, t.id), 0);
-        return { ...mm, tasks: [...mm.tasks, { id: maxId + 1, text: text.trim(), done: false }] };
+        const newTask = { id: maxId + 1, text: text.trim(), done: false };
+        if (recurring) { newTask.recurring = recurring; newTask.lastCompleted = null; }
+        return { ...mm, tasks: [...mm.tasks, newTask] };
       }),
-    }, 'task_added', `${text.trim()} — ${m?.name || ''}`);
+    }, 'task_added', `${text.trim()}${recurring ? ` (${recurringLabel[recurring]})` : ''} — ${m?.name || ''}`);
   };
 
   const addAlert = (mId, text) => {
@@ -469,10 +708,11 @@ export default function SemperDashboard() {
 
   const editTask = (mId, tId, newText) => {
     if (!newText.trim()) return;
+    const m = data.ministries.find(mm => mm.id === mId);
     save({
       ...data,
-      ministries: data.ministries.map(m => m.id === mId ? { ...m, tasks: m.tasks.map(t => t.id === tId ? { ...t, text: newText.trim() } : t) } : m),
-    });
+      ministries: data.ministries.map(mm => mm.id === mId ? { ...mm, tasks: mm.tasks.map(t => t.id === tId ? { ...t, text: newText.trim() } : t) } : mm),
+    }, 'task_edited', `${newText.trim()} — ${m?.name || ''}`);
     setEditingTask(null);
   };
 
@@ -538,13 +778,47 @@ export default function SemperDashboard() {
     }
     if (!personsMap[name].community) personsMap[name].community = [];
     personsMap[name].community.push(c);
+    // Count community tasks
+    const cTasks = c.tasks || [];
+    personsMap[name].totalTasks += cTasks.length;
+    personsMap[name].doneTasks += cTasks.filter(t => t.done).length;
   });
-  const persons = Object.values(personsMap).sort((a, b) => b.totalTasks - a.totalTasks);
+  // Also add extra standalone persons
+  (data.extraPersons || []).forEach(ep => {
+    const name = ep.name;
+    if (!personsMap[name]) {
+      personsMap[name] = { name, ministries: [], totalTasks: 0, doneTasks: 0, alerts: 0 };
+    }
+    personsMap[name].extraTasks = ep.tasks || [];
+    personsMap[name].totalTasks += (ep.tasks || []).length;
+    personsMap[name].doneTasks += (ep.tasks || []).filter(t => t.done).length;
+  });
+  const PERSON_ORDER = ["Stefano", "Alfonso", "Leya", "Guillem", "Blanca & Ori", "Marta", "Agustín", "Mari Tere", "Guille", "Carla", "Pat Hidalgo", "Pauli Sánchez", "Marta Giribert"];
+  const persons = Object.values(personsMap).sort((a, b) => {
+    const ai = PERSON_ORDER.indexOf(a.name);
+    const bi = PERSON_ORDER.indexOf(b.name);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return b.totalTasks - a.totalTasks;
+  });
   const personDetail = activePerson ? personsMap[activePerson] : null;
+
+  // ── Recurring UI helpers ──
+  const [recMenuOpen, setRecMenuOpen] = useState(null); // key of open menu
+  const RecBadge = ({ task }) => task.recurring ? (
+    <span className="rec-badge">🔄 {recurringLabel[task.recurring]}</span>
+  ) : null;
+  const cycleRecurring = (key) => {
+    const cur = inlineNewRecurring[key] || null;
+    const order = [null, "weekly", "biweekly", "monthly"];
+    const next = order[(order.indexOf(cur) + 1) % order.length];
+    setInlineNewRecurring({ ...inlineNewRecurring, [key]: next });
+  };
 
   // ── User picker ──
   if (!currentUser) return (
-    <UserPicker onPick={(name) => { localStorage.setItem('semper_user', name); setCurrentUser(name); }} />
+    <UserPicker onPick={(name) => { try { localStorage.setItem('semper_user', name); } catch(_) {} setCurrentUser(name); }} />
   );
 
   // ── Loading ──
@@ -580,7 +854,7 @@ export default function SemperDashboard() {
         <div style={{ marginLeft: "auto", textAlign: "right" }}>
           <div style={{ fontSize: "1.15rem", color: B.orange, fontWeight: "700", lineHeight: 1 }}>{progress}%</div>
           <div style={{ fontSize: "0.57rem", color: B.textMuted, marginTop: 3, letterSpacing: "0.05em" }}>{doneTasks}/{totalTasks} tareas</div>
-          <button onClick={() => { localStorage.removeItem('semper_user'); setCurrentUser(null); }}
+          <button onClick={() => { try { localStorage.removeItem('semper_user'); } catch(_) {} setCurrentUser(null); }}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.textMuted, fontSize: '0.58rem', letterSpacing: '0.04em', fontFamily: 'inherit', padding: 0, marginTop: 4 }}>
             {currentUser} ×
           </button>
@@ -780,7 +1054,7 @@ export default function SemperDashboard() {
             <div className="dg">
               <div className="card" style={{ padding: "18px 20px" }}>
                 <div className="label">Tareas</div>
-                {ministry.tasks.map(task => (
+                {[...ministry.tasks].sort((a, b) => a.done - b.done).map(task => (
                   <div key={task.id} className="taskrow" style={{ justifyContent: "space-between" }}>
                     {editingTask?.mId === ministry.id && editingTask?.tId === task.id ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
@@ -802,6 +1076,7 @@ export default function SemperDashboard() {
                             color: task.done ? B.textMuted : B.textSub,
                             textDecoration: task.done ? "line-through" : "none",
                           }}>{task.text}</span>
+                          <RecBadge task={task} />
                         </div>
                         <div style={{ display: "flex", gap: 2 }}>
                             <button className="edit-pencil" onClick={(e) => { e.stopPropagation(); setEditingTask({ mId: ministry.id, tId: task.id, text: task.text }); }} title="Editar">✎</button>
@@ -814,9 +1089,14 @@ export default function SemperDashboard() {
                 <div className="add-row">
                     <input className="add-input" placeholder="Añadir tarea..." value={inlineNewTask[ministry.id] || ""}
                       onChange={e => setInlineNewTask({ ...inlineNewTask, [ministry.id]: e.target.value })}
-                      onKeyDown={e => { if (e.key === "Enter" && (inlineNewTask[ministry.id] || "").trim()) { addTask(ministry.id, inlineNewTask[ministry.id]); setInlineNewTask({ ...inlineNewTask, [ministry.id]: "" }); } }}
+                      onKeyDown={e => { if (e.key === "Enter" && (inlineNewTask[ministry.id] || "").trim()) { addTask(ministry.id, inlineNewTask[ministry.id], inlineNewRecurring[ministry.id] || null); setInlineNewTask({ ...inlineNewTask, [ministry.id]: "" }); setInlineNewRecurring({ ...inlineNewRecurring, [ministry.id]: null }); } }}
                     />
-                    <button className="add-btn" disabled={!(inlineNewTask[ministry.id] || "").trim()} onClick={() => { addTask(ministry.id, inlineNewTask[ministry.id]); setInlineNewTask({ ...inlineNewTask, [ministry.id]: "" }); }}>+</button>
+                    <div style={{ position: "relative" }}>
+                      <button className={`rec-toggle${inlineNewRecurring[ministry.id] ? " active" : ""}`} onClick={() => cycleRecurring(ministry.id)} title="Tarea recurrente">
+                        {inlineNewRecurring[ministry.id] ? `🔄 ${recurringLabel[inlineNewRecurring[ministry.id]]}` : "🔄"}
+                      </button>
+                    </div>
+                    <button className="add-btn" disabled={!(inlineNewTask[ministry.id] || "").trim()} onClick={() => { addTask(ministry.id, inlineNewTask[ministry.id], inlineNewRecurring[ministry.id] || null); setInlineNewTask({ ...inlineNewTask, [ministry.id]: "" }); setInlineNewRecurring({ ...inlineNewRecurring, [ministry.id]: null }); }}>+</button>
                   </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -957,7 +1237,7 @@ export default function SemperDashboard() {
 
                   {/* Tasks */}
                   <div className="label" style={{ fontSize: "0.58rem" }}>Tareas</div>
-                  {m.tasks.map(task => (
+                  {[...m.tasks].sort((a, b) => a.done - b.done).map(task => (
                     <div key={task.id} className="taskrow" style={{ justifyContent: "space-between" }}>
                       {editingTask?.mId === m.id && editingTask?.tId === task.id ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
@@ -979,6 +1259,7 @@ export default function SemperDashboard() {
                               color: task.done ? B.textMuted : B.textSub,
                               textDecoration: task.done ? "line-through" : "none",
                             }}>{task.text}</span>
+                          <RecBadge task={task} />
                           </div>
                           <div style={{ display: "flex", gap: 2 }}>
                               <button className="edit-pencil" onClick={(e) => { e.stopPropagation(); setEditingTask({ mId: m.id, tId: task.id, text: task.text }); }} title="Editar">✎</button>
@@ -991,9 +1272,14 @@ export default function SemperDashboard() {
                   <div className="add-row">
                       <input className="add-input" placeholder="Añadir tarea..." value={inlineNewTask[m.id] || ""}
                         onChange={e => setInlineNewTask({ ...inlineNewTask, [m.id]: e.target.value })}
-                        onKeyDown={e => { if (e.key === "Enter" && (inlineNewTask[m.id] || "").trim()) { addTask(m.id, inlineNewTask[m.id]); setInlineNewTask({ ...inlineNewTask, [m.id]: "" }); } }}
+                        onKeyDown={e => { if (e.key === "Enter" && (inlineNewTask[m.id] || "").trim()) { addTask(m.id, inlineNewTask[m.id], inlineNewRecurring[m.id] || null); setInlineNewTask({ ...inlineNewTask, [m.id]: "" }); setInlineNewRecurring({ ...inlineNewRecurring, [m.id]: null }); } }}
                       />
-                      <button className="add-btn" disabled={!(inlineNewTask[m.id] || "").trim()} onClick={() => { addTask(m.id, inlineNewTask[m.id]); setInlineNewTask({ ...inlineNewTask, [m.id]: "" }); }}>+</button>
+                      <div style={{ position: "relative" }}>
+                        <button className={`rec-toggle${inlineNewRecurring[m.id] ? " active" : ""}`} onClick={() => cycleRecurring(m.id)} title="Tarea recurrente">
+                          {inlineNewRecurring[m.id] ? `🔄 ${recurringLabel[inlineNewRecurring[m.id]]}` : "🔄"}
+                        </button>
+                      </div>
+                      <button className="add-btn" disabled={!(inlineNewTask[m.id] || "").trim()} onClick={() => { addTask(m.id, inlineNewTask[m.id], inlineNewRecurring[m.id] || null); setInlineNewTask({ ...inlineNewTask, [m.id]: "" }); setInlineNewRecurring({ ...inlineNewRecurring, [m.id]: null }); }}>+</button>
                     </div>
 
                   {/* Alerts for this ministry */}
@@ -1034,21 +1320,135 @@ export default function SemperDashboard() {
               );
             })}
 
-            {/* Communities they coordinate */}
-            {personDetail.community && personDetail.community.length > 0 && (
-              <div className="card" style={{ padding: "18px 20px", marginBottom: 14 }}>
-                <div className="label">Comunidades que coordina</div>
-                {personDetail.community.map(c => (
-                  <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${B.border}` }}>
-                    <div>
-                      <div style={{ fontSize: "0.88rem", fontWeight: "600" }}>{c.name}</div>
-                      <div style={{ fontSize: "0.72rem", color: B.textMuted, marginTop: 3 }}>{c.note}</div>
+            {/* Communities they coordinate — with tasks */}
+            {personDetail.community && personDetail.community.length > 0 && personDetail.community.map(c => {
+              const cTasks = c.tasks || [];
+              const cDone = cTasks.filter(t => t.done).length;
+              const cPct = cTasks.length > 0 ? Math.round((cDone / cTasks.length) * 100) : 0;
+              return (
+                <div key={c.id} className="card" style={{ padding: "18px 20px", marginBottom: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                    <span style={{ fontSize: "1.1rem" }}>🫂</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "0.85rem", color: "#5ec47a", fontWeight: "700" }}>{c.name}</div>
+                      <div style={{ fontSize: "0.6rem", color: B.textMuted, fontWeight: "600" }}>
+                        {cTasks.length > 0 ? `${cDone}/${cTasks.length} · ${cPct}%` : "Coordinador/a de comunidad"}
+                      </div>
                     </div>
                     <span className="pill" style={{ background: statusCfg[c.status].bg, color: statusCfg[c.status].color, flexShrink: 0 }}>
                       {statusCfg[c.status].label}
                     </span>
                   </div>
+                  {c.note && <div style={{ fontSize: "0.76rem", color: B.textSub, marginBottom: 12, lineHeight: 1.5 }}>{c.note}</div>}
+
+                  {/* Community Tasks */}
+                  <div className="label" style={{ fontSize: "0.58rem" }}>Tareas</div>
+                  {[...cTasks].sort((a, b) => a.done - b.done).map(task => (
+                    <div key={task.id} className="taskrow" style={{ justifyContent: "space-between" }}>
+                      {editingTask?.cId === c.id && editingTask?.tId === task.id ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                          <input className="inline-edit" value={editingTask.text} autoFocus
+                            onChange={e => setEditingTask({ ...editingTask, text: e.target.value })}
+                            onKeyDown={e => { if (e.key === "Enter") editCommTask(c.id, task.id, editingTask.text); if (e.key === "Escape") setEditingTask(null); }}
+                          />
+                          <button className="save-check" onClick={() => editCommTask(c.id, task.id, editingTask.text)} title="Guardar">✓</button>
+                          <button className="cancel-edit" onClick={() => setEditingTask(null)} title="Cancelar">✕</button>
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, flex: 1, cursor: "pointer" }} onClick={() => toggleCommTask(c.id, task.id)}>
+                            <div className={`cb${task.done ? " on" : ""}`}>
+                              {task.done && <span style={{ color: "#0f0e0c", fontSize: "0.65rem", fontWeight: "900" }}>✓</span>}
+                            </div>
+                            <span style={{
+                              fontSize: "0.82rem", lineHeight: 1.55,
+                              color: task.done ? B.textMuted : B.textSub,
+                              textDecoration: task.done ? "line-through" : "none",
+                            }}>{task.text}</span>
+                          <RecBadge task={task} />
+                          </div>
+                          <div style={{ display: "flex", gap: 2 }}>
+                            <button className="edit-pencil" onClick={(e) => { e.stopPropagation(); setEditingTask({ cId: c.id, tId: task.id, text: task.text }); }} title="Editar">✎</button>
+                            <button className="del-x" onClick={(e) => { e.stopPropagation(); requestDeleteCommTask(c.id, task.id); }} title="Eliminar">✕</button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  {cTasks.length === 0 && <div style={{ fontSize: "0.72rem", color: B.textMuted, padding: "4px 0" }}>Sin tareas aún</div>}
+                  <div className="add-row">
+                    <input className="add-input" placeholder="Añadir tarea..." value={inlineNewCommTask[c.id] || ""}
+                      onChange={e => setInlineNewCommTask({ ...inlineNewCommTask, [c.id]: e.target.value })}
+                      onKeyDown={e => { if (e.key === "Enter" && (inlineNewCommTask[c.id] || "").trim()) { addCommTask(c.id, inlineNewCommTask[c.id], inlineNewRecurring[`c_${c.id}`] || null); setInlineNewCommTask({ ...inlineNewCommTask, [c.id]: "" }); setInlineNewRecurring({ ...inlineNewRecurring, [`c_${c.id}`]: null }); } }}
+                    />
+                    <div style={{ position: "relative" }}>
+                      <button className={`rec-toggle${inlineNewRecurring[`c_${c.id}`] ? " active" : ""}`} onClick={() => cycleRecurring(`c_${c.id}`)} title="Tarea recurrente">
+                        {inlineNewRecurring[`c_${c.id}`] ? `🔄 ${recurringLabel[inlineNewRecurring[`c_${c.id}`]]}` : "🔄"}
+                      </button>
+                    </div>
+                    <button className="add-btn" disabled={!(inlineNewCommTask[c.id] || "").trim()} onClick={() => { addCommTask(c.id, inlineNewCommTask[c.id], inlineNewRecurring[`c_${c.id}`] || null); setInlineNewCommTask({ ...inlineNewCommTask, [c.id]: "" }); setInlineNewRecurring({ ...inlineNewRecurring, [`c_${c.id}`]: null }); }}>+</button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Extra person tasks (for standalone persons like Guille) */}
+            {personDetail.extraTasks && (
+              <div className="card" style={{ padding: "18px 20px", marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                  <span style={{ fontSize: "1.1rem" }}>📋</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: "0.85rem", color: B.orange, fontWeight: "700" }}>Tareas personales</div>
+                    <div style={{ fontSize: "0.6rem", color: B.textMuted, fontWeight: "600" }}>
+                      {personDetail.extraTasks.filter(t => t.done).length}/{personDetail.extraTasks.length}
+                    </div>
+                  </div>
+                </div>
+                {[...personDetail.extraTasks].sort((a, b) => a.done - b.done).map(task => (
+                  <div key={task.id} className="taskrow" style={{ justifyContent: "space-between" }}>
+                    {editingTask?.epName === personDetail.name && editingTask?.tId === task.id ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                        <input className="inline-edit" value={editingTask.text} autoFocus
+                          onChange={e => setEditingTask({ ...editingTask, text: e.target.value })}
+                          onKeyDown={e => { if (e.key === "Enter") editExtraTask(personDetail.name, task.id, editingTask.text); if (e.key === "Escape") setEditingTask(null); }}
+                        />
+                        <button className="save-check" onClick={() => editExtraTask(personDetail.name, task.id, editingTask.text)} title="Guardar">✓</button>
+                        <button className="cancel-edit" onClick={() => setEditingTask(null)} title="Cancelar">✕</button>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, flex: 1, cursor: "pointer" }} onClick={() => toggleExtraTask(personDetail.name, task.id)}>
+                          <div className={`cb${task.done ? " on" : ""}`}>
+                            {task.done && <span style={{ color: "#0f0e0c", fontSize: "0.65rem", fontWeight: "900" }}>✓</span>}
+                          </div>
+                          <span style={{
+                            fontSize: "0.82rem", lineHeight: 1.55,
+                            color: task.done ? B.textMuted : B.textSub,
+                            textDecoration: task.done ? "line-through" : "none",
+                          }}>{task.text}</span>
+                        <RecBadge task={task} />
+                        </div>
+                        <div style={{ display: "flex", gap: 2 }}>
+                          <button className="edit-pencil" onClick={(e) => { e.stopPropagation(); setEditingTask({ epName: personDetail.name, tId: task.id, text: task.text }); }} title="Editar">✎</button>
+                          <button className="del-x" onClick={(e) => { e.stopPropagation(); requestDeleteExtraTask(personDetail.name, task.id); }} title="Eliminar">✕</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 ))}
+                {personDetail.extraTasks.length === 0 && <div style={{ fontSize: "0.72rem", color: B.textMuted, padding: "4px 0" }}>Sin tareas aún</div>}
+                <div className="add-row">
+                  <input className="add-input" placeholder="Añadir tarea..." value={inlineNewExtraTask[personDetail.name] || ""}
+                    onChange={e => setInlineNewExtraTask({ ...inlineNewExtraTask, [personDetail.name]: e.target.value })}
+                    onKeyDown={e => { if (e.key === "Enter" && (inlineNewExtraTask[personDetail.name] || "").trim()) { addExtraTask(personDetail.name, inlineNewExtraTask[personDetail.name], inlineNewRecurring[`ep_${personDetail.name}`] || null); setInlineNewExtraTask({ ...inlineNewExtraTask, [personDetail.name]: "" }); setInlineNewRecurring({ ...inlineNewRecurring, [`ep_${personDetail.name}`]: null }); } }}
+                  />
+                  <div style={{ position: "relative" }}>
+                    <button className={`rec-toggle${inlineNewRecurring[`ep_${personDetail.name}`] ? " active" : ""}`} onClick={() => cycleRecurring(`ep_${personDetail.name}`)} title="Tarea recurrente">
+                      {inlineNewRecurring[`ep_${personDetail.name}`] ? `🔄 ${recurringLabel[inlineNewRecurring[`ep_${personDetail.name}`]]}` : "🔄"}
+                    </button>
+                  </div>
+                  <button className="add-btn" disabled={!(inlineNewExtraTask[personDetail.name] || "").trim()} onClick={() => { addExtraTask(personDetail.name, inlineNewExtraTask[personDetail.name], inlineNewRecurring[`ep_${personDetail.name}`] || null); setInlineNewExtraTask({ ...inlineNewExtraTask, [personDetail.name]: "" }); setInlineNewRecurring({ ...inlineNewRecurring, [`ep_${personDetail.name}`]: null }); }}>+</button>
+                </div>
               </div>
             )}
           </div>
@@ -1222,8 +1622,8 @@ export default function SemperDashboard() {
                 feedByDay[day].push(a);
               });
 
-              const actionLabel = { task_done: "Tarea completada", task_undone: "Tarea desmarcada", task_added: "Tarea añadida", task_deleted: "Tarea eliminada", alert_added: "Alerta añadida", event_done: "Evento completado", event_undone: "Evento desmarcado", event_added: "Evento añadido" };
-              const actionColor = { task_done: "#5ec47a", task_undone: B.textMuted, task_added: B.orange, task_deleted: "#f56565", alert_added: "#f56565", event_done: "#5ec47a", event_undone: B.textMuted, event_added: "#60a5fa" };
+              const actionLabel = { task_done: "Tarea completada", task_undone: "Tarea desmarcada", task_added: "Tarea añadida", task_edited: "Tarea editada", task_deleted: "Tarea eliminada", alert_added: "Alerta añadida", event_done: "Evento completado", event_undone: "Evento desmarcado", event_added: "Evento añadido" };
+              const actionColor = { task_done: "#5ec47a", task_undone: B.textMuted, task_added: B.orange, task_edited: "#a78bfa", task_deleted: "#f56565", alert_added: "#f56565", event_done: "#5ec47a", event_undone: B.textMuted, event_added: "#60a5fa" };
 
               return (
                 <>
