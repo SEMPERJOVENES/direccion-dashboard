@@ -6,6 +6,18 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
+// Activity logging — module-level, independent of React lifecycle/useCallback
+function logActivity(action, detail) {
+  if (!action) return;
+  var user = null;
+  try { user = localStorage.getItem('semper_user'); } catch (_e) { return; }
+  if (!user) return;
+  supabase.from("semper_activity")
+    .insert({ user_name: user, action: action, detail: detail || '' })
+    .then(function (_res) { /* request sent */ })
+    .catch(function (_err) { /* swallow */ });
+}
+
 // SEMPER brand colors
 const B = {
   bg: "#1e1140",
@@ -504,22 +516,16 @@ export default function SemperDashboard() {
   }, [activeTab, activityPeriod]);
 
   // Debounced save to Supabase
-  const save = useCallback((d, action = '', detail = '') => {
+  const save = useCallback((d, action, detail) => {
     setData(d);
-    // Immediate localStorage backup
     try { localStorage.setItem("semper_v6", JSON.stringify(d)); } catch (_) {}
-    // Debounced Supabase write (300ms)
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       try {
         await supabase.from("semper_state").upsert({ id: "main", data: d, updated_at: new Date().toISOString() });
       } catch (_) {}
     }, 300);
-    // Log activity
-    let user; try { user = localStorage.getItem('semper_user'); } catch(_) {}
-    if (action && user) {
-      supabase.from("semper_activity").insert({ user_name: user, action, detail }).catch(() => {});
-    }
+    logActivity(action, detail);
   }, []);
 
   // ── CRUD helpers ──
