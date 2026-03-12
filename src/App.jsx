@@ -439,6 +439,9 @@ export default function SemperDashboard() {
 
   const saveTimer = useRef(null);
   const [currentUser, setCurrentUser] = useState(() => { try { return localStorage.getItem('semper_user') || null; } catch(_) { return null; } });
+  const [unlocked, setUnlocked] = useState(() => { try { return sessionStorage.getItem('semper_unlocked') === '1'; } catch(_) { return false; } });
+  const [pwInput, setPwInput] = useState('');
+  const [pwError, setPwError] = useState(false);
 
   // Load from Supabase on mount (fallback to localStorage for migration)
   useEffect(() => {
@@ -821,6 +824,41 @@ export default function SemperDashboard() {
     const next = order[(order.indexOf(cur) + 1) % order.length];
     setInlineNewRecurring({ ...inlineNewRecurring, [key]: next });
   };
+
+  // ── Password gate ──
+  if (!unlocked) return (
+    <div style={{ background: B.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: B.bgCard, border: `1px solid ${B.border}`, borderRadius: 16, padding: "40px 36px", width: "100%", maxWidth: 340, textAlign: "center" }}>
+        <Flame size={36} style={{ color: B.orange, marginBottom: 16 }} />
+        <div style={{ color: B.text, fontWeight: 700, fontSize: "1.1rem", marginBottom: 4, letterSpacing: "0.1em" }}>SEMPER</div>
+        <div style={{ color: B.textSub, fontSize: "0.75rem", marginBottom: 28 }}>Introduce la contraseña para acceder</div>
+        <input
+          type="password"
+          value={pwInput}
+          onChange={e => { setPwInput(e.target.value); setPwError(false); }}
+          onKeyDown={e => { if (e.key === 'Enter') {
+            if (pwInput === (import.meta.env.VITE_ADMIN_PASS || 'amtgamtg')) {
+              try { sessionStorage.setItem('semper_unlocked', '1'); } catch(_) {}
+              setUnlocked(true);
+            } else { setPwError(true); setPwInput(''); }
+          }}}
+          placeholder="Contraseña"
+          style={{ width: "100%", background: "rgba(255,255,255,0.07)", border: `1px solid ${pwError ? '#f87171' : B.border}`, borderRadius: 8, padding: "10px 14px", color: B.text, fontSize: "0.9rem", outline: "none", boxSizing: "border-box", marginBottom: 8 }}
+          autoFocus
+        />
+        {pwError && <div style={{ color: "#f87171", fontSize: "0.75rem", marginBottom: 8 }}>Contraseña incorrecta</div>}
+        <button
+          onClick={() => {
+            if (pwInput === (import.meta.env.VITE_ADMIN_PASS || 'amtgamtg')) {
+              try { sessionStorage.setItem('semper_unlocked', '1'); } catch(_) {}
+              setUnlocked(true);
+            } else { setPwError(true); setPwInput(''); }
+          }}
+          style={{ width: "100%", background: B.orange, color: "#fff", border: "none", borderRadius: 8, padding: "10px", fontWeight: 700, fontSize: "0.9rem", cursor: "pointer", marginTop: 4 }}
+        >Entrar</button>
+      </div>
+    </div>
+  );
 
   // ── User picker ──
   if (!currentUser) return (
